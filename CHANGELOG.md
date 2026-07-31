@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 2026-07-31（34回目）
+### 変更内容
+- [front/src/pages/AdminLinePage.tsx] グループ送信①タイトルを「シフト連絡など」に変更。FloatTextareaのプレースホルダーをLINE自動応答ヒントに変更
+- [front/src/pages/AdminLinePage.tsx] グループ送信②を大幅改修: 場所プルダウン（4店舗+指定なし自由記入）・配置プルダウン8択（その他①②は自由記入）・複数人担当者セクション（確定メンバーチップ選択+自由入力）・追加メモ欄（任意）・送信プレビュー機能。日付を先頭に自動付与して送信
+### デプロイ
+- GitHub (origin/main): プッシュ済み（Vercel自動デプロイ）
+
 ## 2026-07-31（33回目）
 ### 変更内容
 - [front/src/lib/config.ts] PLACE_OPTIONSを実店舗名に差し替え（本店/支店A/支店B/倉庫 → ブリジャール/ルチア/セラス/ルミ・ベガ）。RequestPage・AdminShiftPageのプルダウンは自動反映

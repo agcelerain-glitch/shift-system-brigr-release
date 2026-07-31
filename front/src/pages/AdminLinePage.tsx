@@ -6,11 +6,35 @@ import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { Card, Button, FloatTextarea, Select, Badge, Modal } from '../components/ui';
-import { Send, Bell, MessageCircle, Megaphone, Users, Info, Trash2, Wifi, WifiOff, CalendarDays } from 'lucide-react';
+import { Send, Bell, MessageCircle, Megaphone, Users, Info, Trash2, Wifi, WifiOff, CalendarDays, Plus, X } from 'lucide-react';
 import { callLineApi, subscribeLineConfig, deleteGroupId } from '../lib/db';
 import { isFirebaseConfigured, API_BASE_URL } from '../lib/firebase';
 import { formatDateJP, todayStr } from '../lib/utils';
 import { MonthCalendar, DayShiftList } from '../components/MonthCalendar';
+import { PLACE_OPTIONS } from '../lib/config';
+
+const POSITION_OPTIONS = [
+  { value: '付け回し',   label: '付け回し',           hasCustom: false },
+  { value: 'キャシャーン', label: 'キャシャーン',         hasCustom: false },
+  { value: 'フロント',   label: 'フロント',            hasCustom: false },
+  { value: 'ホール長',   label: 'ホール長',            hasCustom: false },
+  { value: 'ホール',    label: 'ホール',              hasCustom: false },
+  { value: 'ストッカー', label: 'ストッカー',           hasCustom: false },
+  { value: 'other1',   label: 'その他（自由記入①）',    hasCustom: true  },
+  { value: 'other2',   label: 'その他（自由記入②）',    hasCustom: true  },
+] as const;
+
+type PositionRow = {
+  id: string;
+  position: string;
+  positionCustom: string;
+  selectedMembers: string[];
+  freeInputName: string;
+};
+
+function newPosRow(): PositionRow {
+  return { id: Math.random().toString(36).slice(2), position: '', positionCustom: '', selectedMembers: [], freeInputName: '' };
+}
 
 export function AdminLinePage() {
   const { members, shifts } = useData();
@@ -21,7 +45,10 @@ export function AdminLinePage() {
   // グループ送信: シフト連絡
   const [shiftMsg, setShiftMsg] = useState('');
   // 当日ポジション配置
-  const [positionMsg, setPositionMsg] = useState('');
+  const [posPlace, setPosPlace] = useState('');
+  const [posPlaceCustom, setPosPlaceCustom] = useState('');
+  const [posRows, setPosRows] = useState<PositionRow[]>([newPosRow()]);
+  const [posMemo, setPosMemo] = useState('');
   // セルフ通知
   const [selfMsg, setSelfMsg] = useState('');
   // 個別チャット
@@ -53,6 +80,10 @@ export function AdminLinePage() {
   }, []);
 
   const todayShifts = shifts.filter((s) => s.date === todayStr());
+  const todayConfirmedMembers = useMemo(
+    () => [...new Set(todayShifts.filter((s) => s.status === 'confirmed').map((s) => s.memberName))],
+    [todayShifts],
+  );
   const lineMembers = members.filter((m) => m.lineUserId);
   const adminMember = members.find((m) => m.name === adminName);
   const adminLineId = adminMember?.lineUserId;
@@ -77,6 +108,26 @@ export function AdminLinePage() {
     } finally {
       setSending(false);
     }
+  };
+
+  const buildPositionMessage = (): string => {
+    const dateLabel = formatDateJP(todayStr());
+    let msg = `📅 ${dateLabel} ポジション配置`;
+    const placeDisplay = posPlace === '__custom__' ? posPlaceCustom.trim() : posPlace;
+    if (placeDisplay) msg += `\n📍 ${placeDisplay}`;
+    msg += '\n';
+    for (const row of posRows) {
+      const posName = (row.position === 'other1' || row.position === 'other2')
+        ? row.positionCustom.trim()
+        : row.position;
+      if (!posName) continue;
+      const persons: string[] = [...row.selectedMembers];
+      row.freeInputName.split(/[,、]/).map((n) => n.trim()).filter(Boolean).forEach((n) => persons.push(n));
+      const personStr = persons.length > 0 ? persons.join('、') : '—';
+      msg += `\n▸ ${posName}: ${personStr}`;
+    }
+    if (posMemo.trim()) msg += `\n\n${posMemo.trim()}`;
+    return msg;
   };
 
   const sendSelf = async () => {
@@ -194,12 +245,12 @@ export function AdminLinePage() {
               <Megaphone className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="font-semibold text-gray-900">グループ送信① シフト連絡</h2>
-              <p className="text-xs text-gray-500">グループへシフト情報を一括送信</p>
+              <h2 className="font-semibold text-gray-900">グループ送信① シフト連絡など</h2>
+              <p className="text-xs text-gray-500">グループへメッセージを一括送信</p>
             </div>
           </div>
           <FloatTextarea
-            label="例: 今週のシフトをお知らせします…"
+            label="「今週」とグループや公式LINEで送信すると、今週の予定が自動応答されます"
             rows={4}
             value={shiftMsg}
             onChange={(e) => setShiftMsg(e.target.value)}
@@ -228,20 +279,160 @@ export function AdminLinePage() {
               <p className="text-xs text-gray-500">当日の配置をグループへ連絡</p>
             </div>
           </div>
-          <div className="bg-blue-50 rounded-lg p-3 mb-2 text-xs text-gray-600 max-h-32 overflow-y-auto">
-            <p className="font-medium text-blue-700 mb-1">本日({formatDateJP(todayStr())})のシフト:</p>
-            {todayShifts.length === 0 ? (
-              <p>シフトなし</p>
-            ) : (
-              todayShifts.map((s) => <p key={s.id}>{s.memberName} · {s.subject}</p>)
+
+          {/* 日付（自動） */}
+          <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-3">
+            <CalendarDays className="w-3.5 h-3.5" />
+            <span className="font-medium text-gray-700">{formatDateJP(todayStr())}</span>
+            <span>がメッセージ先頭に自動追加されます</span>
+          </div>
+
+          {/* 場所プルダウン（全体で1つ） */}
+          <div className="mb-3">
+            <label className="block text-xs font-medium text-gray-600 mb-1">場所</label>
+            <Select
+              value={posPlace}
+              onChange={(e) => { setPosPlace(e.target.value); setPosPlaceCustom(''); }}
+            >
+              <option value="">（場所を選択）</option>
+              {PLACE_OPTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
+              <option value="__custom__">指定なし（自由記入）</option>
+            </Select>
+            {posPlace === '__custom__' && (
+              <input
+                type="text"
+                value={posPlaceCustom}
+                onChange={(e) => setPosPlaceCustom(e.target.value)}
+                placeholder="場所を入力..."
+                className="mt-1.5 w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+              />
             )}
           </div>
-          <FloatTextarea rows={3} label="例: 本日の配置: レジ=山田さん、品出し=佐藤さん" value={positionMsg} onChange={(e) => setPositionMsg(e.target.value)} disabled={sending} />
-          <p className="text-[10px] text-gray-400 mt-1.5">送信失敗時は内容を非公開メモに保存してください</p>
+
+          {/* 配置行 */}
+          <div className="space-y-2 mb-3">
+            {posRows.map((row, idx) => (
+              <div key={row.id} className="border border-gray-200 rounded-xl p-3 bg-gray-50">
+                {/* 行ヘッダー */}
+                <div className="flex items-center mb-2">
+                  <span className="text-xs font-medium text-gray-400">配置 {idx + 1}</span>
+                  {posRows.length > 1 && (
+                    <button
+                      onClick={() => setPosRows((prev) => prev.filter((r) => r.id !== row.id))}
+                      className="ml-auto text-gray-300 hover:text-red-400 transition-colors"
+                      aria-label="この行を削除"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+
+                {/* 配置プルダウン */}
+                <Select
+                  value={row.position}
+                  onChange={(e) => setPosRows((prev) => prev.map((r) =>
+                    r.id === row.id ? { ...r, position: e.target.value, positionCustom: '' } : r
+                  ))}
+                  className="mb-2"
+                >
+                  <option value="">配置を選択</option>
+                  {POSITION_OPTIONS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+                </Select>
+
+                {/* その他の自由記入 */}
+                {(row.position === 'other1' || row.position === 'other2') && (
+                  <input
+                    type="text"
+                    value={row.positionCustom}
+                    onChange={(e) => setPosRows((prev) => prev.map((r) =>
+                      r.id === row.id ? { ...r, positionCustom: e.target.value } : r
+                    ))}
+                    placeholder="配置名を入力..."
+                    className="mb-2 w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  />
+                )}
+
+                {/* 担当者: 確定メンバーをチップで選択 */}
+                {todayConfirmedMembers.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {todayConfirmedMembers.map((name) => {
+                      const selected = row.selectedMembers.includes(name);
+                      return (
+                        <button
+                          key={name}
+                          type="button"
+                          onClick={() => setPosRows((prev) => prev.map((r) => r.id !== row.id ? r : {
+                            ...r,
+                            selectedMembers: selected
+                              ? r.selectedMembers.filter((n) => n !== name)
+                              : [...r.selectedMembers, name],
+                          }))}
+                          className={`text-xs px-2.5 py-1 rounded-full font-medium border-2 transition-all ${
+                            selected
+                              ? 'border-blue-500 bg-blue-100 text-blue-700'
+                              : 'border-gray-200 bg-white text-gray-500 hover:border-blue-300'
+                          }`}
+                        >
+                          {name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* 担当者: 自由入力（急な交代など） */}
+                <input
+                  type="text"
+                  value={row.freeInputName}
+                  onChange={(e) => setPosRows((prev) => prev.map((r) =>
+                    r.id === row.id ? { ...r, freeInputName: e.target.value } : r
+                  ))}
+                  placeholder="直接入力（,区切りで複数可）"
+                  className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                />
+              </div>
+            ))}
+          </div>
+
+          {/* 配置追加ボタン */}
+          <button
+            type="button"
+            onClick={() => setPosRows((prev) => [...prev, newPosRow()])}
+            className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl border-2 border-dashed border-blue-300 text-blue-600 text-sm font-medium hover:bg-blue-50 transition-colors mb-3"
+          >
+            <Plus className="w-4 h-4" />配置を追加する
+          </button>
+
+          {/* 任意メモ */}
+          <FloatTextarea
+            rows={2}
+            label="追加メモ（任意）"
+            value={posMemo}
+            onChange={(e) => setPosMemo(e.target.value)}
+            disabled={sending}
+          />
+
+          {/* 送信プレビュー */}
+          <details className="mt-2 mb-1">
+            <summary className="text-xs text-gray-400 cursor-pointer select-none hover:text-gray-600">送信プレビューを確認</summary>
+            <pre className="mt-1.5 bg-gray-100 rounded-lg p-2.5 text-xs whitespace-pre-wrap break-all font-mono text-gray-700 leading-relaxed">
+              {buildPositionMessage()}
+            </pre>
+          </details>
+
+          <p className="text-[10px] text-gray-400 mt-1">送信失敗時は内容を非公開メモに保存してください</p>
           <div className="mt-2 flex justify-end">
             <Button
-              onClick={() => send('/line/group/position', { message: positionMsg, date: todayStr() }, '当日配置', () => setPositionMsg(''))}
-              disabled={sending || !positionMsg.trim() || !groupId}
+              onClick={() => {
+                const message = buildPositionMessage();
+                send('/line/group/position', { message }, '当日配置', () => {
+                  setPosRows([newPosRow()]);
+                  setPosMemo('');
+                  setPosPlace('');
+                  setPosPlaceCustom('');
+                });
+              }}
+              disabled={sending || !groupId || posRows.every((r) => !r.position)}
               title={!groupId ? 'GIDが未登録です' : undefined}
             >
               <Send className="w-4 h-4" />送信
