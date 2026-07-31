@@ -26,7 +26,7 @@ function timeLabelOf(s: Shift): string {
 }
 function timeSortVal(s: Shift): number {
   if (s.timeType === 'time' && s.timeStart) return parseInt(s.timeStart.replace(':', ''), 10);
-  if (s.timeType === 'template' && s.template) return { A: 900, B: 1300, C: 1700, D: 2100 }[s.template];
+  if (s.timeType === 'template' && s.template) return { A: 2000, B: 2030, C: 2130, D: 2200 }[s.template];
   return 9999;
 }
 

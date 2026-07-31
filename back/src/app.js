@@ -142,12 +142,12 @@ app.post('/line/webhook', verifyLineSignature, async (req, res) => {
 
 const WEEKDAYS_JP = ['日', '月', '火', '水', '木', '金', '土'];
 
-// テンプレ帯の時間定義（config.tsと同期）
+// テンプレ帯の時間定義（config.tsと同期。26:00=翌2:00、LAST=閉店）
 const TEMPLATE_TIMES = {
-  A: { start: '09:00', end: '13:00' },
-  B: { start: '13:00', end: '17:00' },
-  C: { start: '17:00', end: '21:00' },
-  D: { start: '21:00', end: '25:00' },
+  A: { start: '20:00', end: 'LAST' },
+  B: { start: '20:30', end: '26:00' },
+  C: { start: '21:30', end: 'LAST' },
+  D: { start: '22:00', end: '26:00' },
 };
 
 // JST の今日 (UTC基準Dateオブジェクト)

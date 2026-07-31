@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 2026-07-31（31回目）
+### 変更内容
+- [front/src/lib/config.ts] TEMPLATE_TIMES更新（A:20:00-LAST / B:20:30-26:00 / C:21:30-LAST / D:22:00-26:00）。SUBJECT_OPTIONSのラベルにTEMPLATE_TIMESの時間帯を自動表示するよう変更
+- [back/src/app.js] TEMPLATE_TIMESをconfig.tsと同期更新
+- [front/src/pages/RequestPage.tsx] シフト申請を複数件まとめて申請できるよう全面改修（「申請を追加する」ボタンで申請エントリーを追加、各エントリーに日付・件名・時間・場所を個別設定可能）。時刻オプションを09:00始まりに変更、終了時刻は26:00（翌2:00）まで対応
+- [front/src/pages/AdminShiftPage.tsx] timeSortValのテンプレートソート値を新時間帯に合わせて更新（A:2000/B:2030/C:2130/D:2200）
+- [front/src/pages/ManualUserPage.tsx] テンプレ時間を新時間帯に更新、不可申請の説明から誤った「週単位」記述を削除、シフト申請セクションに複数申請の説明を追加
+### デプロイ
+- GitHub (origin/main): 全変更をプッシュ（Vercel自動デプロイ）
+- Heroku: back/をプッシュ（TEMPLATE_TIMES同期）
+
 ## 2026-07-31（30回目）
 ### 変更内容
 - [back/package.json] Node.jsバージョンを18.x（EOL）→ 22.x（現行LTS）に更新（Herokuビルド警告を解消）

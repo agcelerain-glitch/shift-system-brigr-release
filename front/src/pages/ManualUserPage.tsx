@@ -71,8 +71,8 @@ export function ManualUserPage() {
         <SectionCard icon={FilePlus} title="シフト申請">
           3つのモードから選びます：
           <ul className="mt-1.5 space-y-1 list-disc list-inside">
-            <li><strong>不可（シフトなし）</strong>：選択した週の月〜日をまとめて不可申請</li>
-            <li><strong>シフト申請</strong>：テンプレ（A〜D帯）または時間指定で申請</li>
+            <li><strong>シフト申請</strong>：テンプレ（A〜D帯）または時間指定で申請。<strong>「申請を追加する」</strong>ボタンで複数日をまとめて申請可能</li>
+            <li><strong>不可（シフトなし）</strong>：日付を追加して複数日まとめて不可申請</li>
             <li><strong>その他</strong>：給料受取のみの日に申請</li>
           </ul>
           同じ日付に既に申請がある場合は<strong>重複警告</strong>が表示され、二重申請を防ぎます。
@@ -92,18 +92,18 @@ export function ManualUserPage() {
         </SectionCard>
 
         <SectionCard icon={Layers} title="テンプレ（A帯〜D帯）">
-          {/* 開発メモ: TEMPLATE_TIMES = { A:'09-13', B:'13-17', C:'17-21', D:'21-25' }（config.tsで一元管理） */}
+          {/* 開発メモ: TEMPLATE_TIMES = { A:'20:00-LAST', B:'20:30-26:00', C:'21:30-LAST', D:'22:00-26:00' }（config.tsで一元管理） */}
           <ul className="space-y-0.5">
-            <li><strong>A帯</strong>：09:00〜13:00</li>
-            <li><strong>B帯</strong>：13:00〜17:00</li>
-            <li><strong>C帯</strong>：17:00〜21:00</li>
-            <li><strong>D帯</strong>：21:00〜25:00</li>
+            <li><strong>A帯</strong>：20:00〜LAST（閉店）</li>
+            <li><strong>B帯</strong>：20:30〜翌2:00</li>
+            <li><strong>C帯</strong>：21:30〜LAST（閉店）</li>
+            <li><strong>D帯</strong>：22:00〜翌2:00</li>
           </ul>
-          <span className="block mt-1">テンプレを選ぶと時間入力を省略できます。</span>
+          <span className="block mt-1">テンプレを選ぶと時間入力を省略できます。「LAST」は閉店時間を表します。</span>
         </SectionCard>
 
         <SectionCard icon={Ban} title="不可（シフトなし）の申請">
-          その週出勤できない場合は<strong>不可</strong>を申請してください。<strong>週単位</strong>（月〜日）でまとめて申請されます。管理者側でシフト調整の参考にします。
+          出勤できない日がある場合は<strong>不可</strong>を申請してください。<strong>「+日付を追加する」</strong>ボタンで複数日をまとめて指定できます。管理者側でシフト調整の参考にします。
         </SectionCard>
 
         <SectionCard icon={Wallet} title="その他（給料受取のみ）">
