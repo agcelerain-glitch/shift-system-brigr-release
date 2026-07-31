@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 2026-07-31（29回目）
+### 変更内容
+- [front/public/favicon.ico, favicon-16x16.png, favicon-32x32.png, apple-touch-icon.png, android-chrome-192x192.png, android-chrome-512x512.png] faviconを差し替え
+### デプロイ
+- GitHub (origin/main): favicon変更をプッシュ（Vercel自動デプロイ）
+- Heroku: back/をプッシュ（v7）
+
 ## 2026-07-21（28回目）
 ### 変更内容
 - [front/src/pages/RequestPage.tsx] 不可モードの日付入力欄下テキストを曜日のみ表示に変更（Input表示との日付二重表示を解消）
