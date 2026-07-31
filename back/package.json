@@ -4,7 +4,7 @@
   "description": "LINE連携バックエンド (Heroku)",
   "main": "src/app.js",
   "engines": {
-    "node": "20.x"
+    "node": "22.x"
   },
   "scripts": {
     "start": "node src/app.js",

@@ -2,7 +2,7 @@
 
 ## 2026-07-31（30回目）
 ### 変更内容
-- [back/package.json] Node.jsバージョンを18.x（EOL）→ 20.xに更新（Herokuビルド警告を解消）
+- [back/package.json] Node.jsバージョンを18.x（EOL）→ 22.x（現行LTS）に更新（Herokuビルド警告を解消）
 - [back/.env.example] Firebase Admin SDK変数（FIREBASE_PROJECT_ID/CLIENT_EMAIL/PRIVATE_KEY）を追加、FRONTEND_URLを追加、PORT=3000を削除（Heroku自動設定のため）、LINE_GROUP_IDにフォールバック専用である旨のコメントを追加
 - [README.md] back/.env表にFRONTEND_URL・PORT設定禁止・各変数の必要性を追記。git push heroku master → git push heroku main に修正。モノレポ構成でのgit subtreeデプロイ手順を追記
 ### デプロイ
