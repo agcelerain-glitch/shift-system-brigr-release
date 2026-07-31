@@ -113,14 +113,21 @@ const TEMPLATE_TIMES = {
   - Firebase Admin SDK の認証情報も追加（`FIREBASE_PROJECT_ID` / `FIREBASE_CLIENT_EMAIL` / `FIREBASE_PRIVATE_KEY`）
 - [ ] [Heroku](https://heroku.com/) で新規アプリを作成
 - [ ] Heroku の環境変数（Config Vars）に `back/.env` の内容を登録
-- [ ] `back/` ディレクトリで `git init` → Heroku にデプロイ
+- [ ] Heroku にデプロイ（モノレポ構成の場合はルートから `git subtree` を使用）
   ```
-  git init
+  # ルートリポジトリから back/ サブツリーのみを Heroku に push する
   heroku git:remote -a your-heroku-app-name
-  git add .
-  git commit -m "initial"
-  git push heroku master
+  git subtree push --prefix back heroku main
   ```
+  > `back/` 単独で git を管理する場合:
+  > ```
+  > cd back/
+  > git init
+  > heroku git:remote -a your-heroku-app-name
+  > git add .
+  > git commit -m "initial"
+  > git push heroku main
+  > ```
 - [ ] フロントの `VITE_API_BASE_URL` を Heroku の URL に更新して再デプロイ
 
 ### Step 6: LINE グループ連携
@@ -155,18 +162,20 @@ const TEMPLATE_TIMES = {
 | `VITE_ADMIN_EMAIL` | admin専用アカウントのメールアドレス |
 | `VITE_API_BASE_URL` | Heroku バックエンドの URL |
 
-### `back/.env`
+### `back/.env`（Heroku Config Vars）
 
-| 変数名 | 内容 |
-|--------|------|
-| `CHANNEL_SECRET` | LINE Channel Secret |
-| `CHANNEL_ACCESS_TOKEN` | LINE Channel Access Token |
-| `LINE_GROUP_ID` | LINEグループのID（グループ登録後に自動設定） |
-| `LINE_SELF_USER_ID` | 管理者自身の LINE User ID |
-| `ALLOWED_ORIGIN` | CORSを許可するVercelのURL |
-| `FIREBASE_PROJECT_ID` | Firebase プロジェクトID |
-| `FIREBASE_CLIENT_EMAIL` | Firebase Admin SDK のクライアントEmail |
-| `FIREBASE_PRIVATE_KEY` | Firebase Admin SDK の秘密鍵 |
+| 変数名 | 必要性 | 内容 |
+|--------|--------|------|
+| `CHANNEL_SECRET` | **必須** | LINE Channel Secret（署名検証に使用） |
+| `CHANNEL_ACCESS_TOKEN` | **必須** | LINE Channel Access Token（メッセージ送信に使用） |
+| `LINE_SELF_USER_ID` | **必須** | 管理者自身の LINE User ID（エラー通知・自分への連絡用） |
+| `ALLOWED_ORIGIN` | **必須** | CORSを許可するVercelのURL（例: `https://your-app.vercel.app`） |
+| `FIREBASE_PROJECT_ID` | **必須** | Firebase プロジェクトID（Firestore接続に必要） |
+| `FIREBASE_CLIENT_EMAIL` | **必須** | Firebase Admin SDK のクライアントEmail |
+| `FIREBASE_PRIVATE_KEY` | **必須** | Firebase Admin SDK の秘密鍵（改行は `\n` でエスケープ） |
+| `FRONTEND_URL` | 任意 | 名前未一致時のLINE返信内に表示するフロントURL。未設定でも動作する |
+| `LINE_GROUP_ID` | 不要 | グループIDはFirestoreに自動保存される。env varはフォールバック専用のため通常設定不要 |
+| `PORT` | **設定禁止** | Herokuが動的に割り当てるため設定してはいけない。固定値を入れるとアプリが起動しない |
 
 ---
 

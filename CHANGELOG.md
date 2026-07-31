@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 2026-07-31（30回目）
+### 変更内容
+- [back/package.json] Node.jsバージョンを18.x（EOL）→ 20.xに更新（Herokuビルド警告を解消）
+- [back/.env.example] Firebase Admin SDK変数（FIREBASE_PROJECT_ID/CLIENT_EMAIL/PRIVATE_KEY）を追加、FRONTEND_URLを追加、PORT=3000を削除（Heroku自動設定のため）、LINE_GROUP_IDにフォールバック専用である旨のコメントを追加
+- [README.md] back/.env表にFRONTEND_URL・PORT設定禁止・各変数の必要性を追記。git push heroku master → git push heroku main に修正。モノレポ構成でのgit subtreeデプロイ手順を追記
+### デプロイ
+- GitHub (origin/main): プッシュ済み
+- Heroku: back/をプッシュ（v8相当）
+
 ## 2026-07-31（29回目）
 ### 変更内容
 - [front/public/favicon.ico, favicon-16x16.png, favicon-32x32.png, apple-touch-icon.png, android-chrome-192x192.png, android-chrome-512x512.png] faviconを差し替え
