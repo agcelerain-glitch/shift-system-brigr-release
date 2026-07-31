@@ -1,0 +1,58 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.role == 'admin';
+    }
+    function isUserOrAdmin() {
+      return isSignedIn() &&
+        (request.auth.token.role == 'user' || request.auth.token.role == 'admin');
+    }
+
+    // 名簿: 認証済みは読取/作成/更新可、削除はadminのみ
+    match /members/{memberId} {
+      allow read, create, update: if isUserOrAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // シフト: 認証済みは読取/作成可、更新はadminのみ（承認・調整）
+    // 例外: userは自分の確定シフトをdelete_requestedに変更可（削除依頼）
+    // 削除: planはuser/admin両方可（キャンセル）、delete_requestedはadminのみ可
+    match /shifts/{shiftId} {
+      allow read: if isUserOrAdmin();
+      allow create: if isUserOrAdmin();
+      allow update: if isAdmin() ||
+        (isUserOrAdmin() &&
+         request.resource.data.status == 'delete_requested' &&
+         resource.data.diff(request.resource.data).affectedKeys().hasOnly(['status', 'updatedAt', 'version']));
+      allow delete: if isAdmin() ||
+        (isUserOrAdmin() && resource.data.status == 'plan');
+    }
+
+    // 全体掲示板: 認証済みは読取可、adminのみ書込/削除
+    match /boardPublic/{docId} {
+      allow read: if isUserOrAdmin();
+      allow write: if isAdmin();
+    }
+
+    // admin非公開メモ: adminのみ読み書き
+    match /boardPrivate/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // 承認ログ: adminのみ読み書き
+    match /approvalLogs/{logId} {
+      allow read, write: if isAdmin();
+    }
+
+    // システム設定（LINEグループIDなど）: userは読取、adminのみ書込
+    match /config/{docId} {
+      allow read: if isUserOrAdmin();
+      allow write: if isAdmin();
+    }
+  }
+}

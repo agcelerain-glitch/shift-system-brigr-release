@@ -1,0 +1,16 @@
+{
+  "dependencies": {
+    "firebase": "^12.17.0",
+    "firebase-admin": "^13.10.0"
+  },
+  "name": "shiftsystem_bri_release",
+  "version": "1.0.0",
+  "main": "sdk_tmp.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": ""
+}

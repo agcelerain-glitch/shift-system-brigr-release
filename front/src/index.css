@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── ハイコントラスト1: 赤緑色盲対応（予定=橙系 / 確定=青系） ── */
+[data-theme="hc1"] .bg-plan-soft    { background-color: #fed7aa !important; }
+[data-theme="hc1"] .text-plan-strong { color: #9a3412 !important; }
+[data-theme="hc1"] .border-plan-base { border-color: #f97316 !important; }
+[data-theme="hc1"] .bg-confirmed-soft    { background-color: #bfdbfe !important; }
+[data-theme="hc1"] .text-confirmed-strong { color: #1e40af !important; }
+[data-theme="hc1"] .border-confirmed-base { border-color: #3b82f6 !important; }
+
+/* ── ハイコントラスト2: 高視認性（コントラスト比を最大化・太枠） ── */
+[data-theme="hc2"] .bg-plan-soft    { background-color: #fef08a !important; }
+[data-theme="hc2"] .text-plan-strong { color: #78350f !important; }
+[data-theme="hc2"] .border-plan-base { border-color: #b45309 !important; }
+[data-theme="hc2"] .bg-confirmed-soft    { background-color: #a7f3d0 !important; }
+[data-theme="hc2"] .text-confirmed-strong { color: #064e3b !important; }
+[data-theme="hc2"] .border-confirmed-base { border-color: #059669 !important; }
+[data-theme="hc2"] [data-badge] { font-weight: 700 !important; border-width: 2px !important; }

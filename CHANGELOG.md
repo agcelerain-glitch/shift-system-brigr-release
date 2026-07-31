@@ -1,0 +1,226 @@
+# CHANGELOG
+
+## 2026-07-21（28回目）
+### 変更内容
+- [front/src/pages/RequestPage.tsx] 不可モードの日付入力欄下テキストを曜日のみ表示に変更（Input表示との日付二重表示を解消）
+- [front/src/components/UserLayout.tsx] navタブをrounded-t-xl+shadow構造で立体的なタブ型デザインに変更。ロゴボタンクリックでカレンダー(/)へ遷移。ヘッダーにshadow追加
+- [front/src/components/AdminLayout.tsx] 同様にタブ立体化（ダークカラー）。ロゴボタンでシフト調整(/admin-shift)へ遷移
+
+## 2026-07-21（27回目）
+### 変更内容
+- [back/src/app.js] 友達追加（follow）時のwebhookメッセージを簡略化。LINE公式側の挨拶と重複する冒頭を削除し、名前登録手順と注意事項・シフト確認の使い方のみをシンプルに案内する表記に変更
+
+## 2026-07-21（26回目）
+### 変更内容
+- [front/src/pages/LoginPage.tsx] チェックボックス「パスワードを保存する」追加、localStorageへのパスワード保存・自動入力・ログイン日時記録（最新10件）実装
+- [front/src/pages/AdminLoginPage.tsx] 同上（管理者用。ストレージキーは別管理）
+- [front/src/pages/RequestPage.tsx] 不可モードを週単位→複数日指定に変更。「+日付を追加する」ボタンで複数日追加、個別削除ボタン付き。送信ボタンに選択日数を表示
+
+## 2026-07-21（25回目）
+### 変更内容
+- [front/src/components/UserLayout.tsx] フッターのmt-8→mt-16・pb拡大・ボタンのpy-3 px-6でタップ余裕確保。プルトゥリフレッシュ（下スワイプで再取得）追加
+- [front/src/components/AdminLayout.tsx] プルトゥリフレッシュ追加
+- [front/src/contexts/DataContext.tsx] refresh関数を追加（refreshKeyでFirestore購読を再起動）
+- [front/src/hooks/usePullToRefresh.ts] 新規作成: touchイベントベースのプルトゥリフレッシュフック
+- [front/src/pages/AdminShiftPage.tsx] 申請表記を「申請 日時」のみに簡略化、修正履歴はv>1の場合のみ薄い小字で別行表示
+- [front/src/pages/AdminLinePage.tsx] selfMsg・dmMsg送信成功時にテキストエリアをクリア。全Textareaをフローティングラベル形式（FloatTextarea）に置き換え
+- [front/src/components/ui.tsx] FloatTextareaコンポーネント追加（フォーカス/入力時にラベルが枠上縁に移動するデザイン）、useState import追加
+
+## 2026-07-21（24回目）
+### 変更内容
+- [front/index.html] viewport metaに viewport-fit=cover を追加（iPhoneのSafe Area対応）
+- [front/src/index.css] ハイコントラストテーマCSS追加（data-theme=hc1: 橙・青系 / hc2: 高視認性）
+- [front/src/components/ui.tsx] Badge に data-badge 属性追加（hc2での太枠・太字スタイリング用）
+- [front/src/hooks/useColorTheme.ts] 新規作成: テーマ管理フック（normal→hc1→hc2→normalのループ、localStorage永続化）
+- [front/src/pages/ManualUserPage.tsx] 表示カラー設定セクション追加（テーマ切替ボタン・バッジプレビュー・説明文）
+- [front/src/components/UserLayout.tsx] フッターにSafe Area対応padding追加、管理者ログインボタンのタップ領域拡大・aria-label追加、ログアウトボタンのp-1.5→p-2拡大・aria-label追加
+- [front/src/components/AdminLayout.tsx] ユーザーへ/ログアウトボタンのpaddingをp-2に統一・aria-label追加
+- [front/src/pages/RequestPage.tsx] ゴミ箱ボタンをp-1→p-2に拡大・aria-label="申請を取り消す"追加
+- [front/src/pages/PersonalPage.tsx] 申請取消・削除依頼ボタンに aria-label（日付付き）を追加
+
+## 2026-07-21（23回目）
+### 変更内容
+- [front/src/pages/RequestPage.tsx] モードカードの順序を「シフト申請→不可→その他」に変更
+- [front/src/pages/RequestPage.tsx] 不可申請のsubjectに名前を追加（`不可（シフトなし） {name}`形式）
+- [front/src/pages/RequestPage.tsx] 給料受取などのsubjectに名前を追加（`給料受取など {name}`形式）
+- [front/src/pages/RequestPage.tsx] 場所フィールドに「その他（自由記入）」選択肢を追加。選択時にテキスト入力欄が展開する
+- [front/src/pages/PersonalPage.tsx] ShiftCardの日付にアンダーラインを追加（曜日色に合わせた薄い装飾線）
+
+## 2026-07-21（22回目）
+### 変更内容
+- [back/src/app.js] 「今週」受信時の期間を月曜基準7日間から「今日から7日間」に変更（過去日を含まないよう修正）
+- [back/src/app.js] fetchShifts の戻り値を `{ confirmed: [], plan: [] }` 構造に変更。不可（timeType:'none'）・否認済（reviewed）・削除申請（delete_requested）を除外
+- [back/src/app.js] buildSingleDayReply / buildRangeReply を確定（confirmed）のみ詳細表示に変更。カッコ書きのステータスラベルを削除し、確定は✅アイコンのみで表示。未承認（plan + timeType:'none'以外）は件数のみヘッダーに「・未承認N件」として表示
+- [back/src/app.js] 未使用になった statusMeta 関数を削除
+
+## 2026-07-20（21回目）
+### 変更内容
+- [back/src/app.js] buildRangeReply の整形改善: 日付ヘッダー前に必ず空白行を挿入（`\n\n▸`）。時間・場所を同一行から改行+スペース5個のインデントに変更（`\n     ⏰ tl`・`\n     📍 place`）。headerの初期値から末尾`\n`を削除して空白行の二重挿入を防止
+
+## 2026-07-20（20回目）
+### 変更内容
+- [front/src/pages/AdminShiftPage.tsx] 名簿詳細の「LINEへ」リンクを削除（LINE済バッジはそのまま残す）。MessageCircle importを削除
+- [front/src/pages/AdminShiftPage.tsx] 週間サマリーの各日付カードをクリック可能なbuttonに変更。summarySelectedDate stateを追加。タップで詳細モーダルを表示（confirmed/plan/reviewed/delete_requested を確定→予定→確認済の順で表示、不可申請はセクション分けして下部表示）
+
+## 2026-07-20（19回目）
+### 変更内容
+- [back/src/app.js] 日付問い合わせ返答に予定シフト（status=plan）を追加。fetchConfirmedShifts→fetchShiftsに改名しplan+confirmedを取得。statusMeta関数追加（確定=✅/予定=🔸のアイコン・ラベルを返す）。返答の各シフトに「（確定）」「（予定）」をカッコ書きで追加。日ヘッダーのカウントを「確定N・予定N名」形式に変更。日付内の表示順を確定→予定に固定
+
+## 2026-07-20（18回目）
+### 変更内容
+- [back/src/app.js] LINE Webhook日付問い合わせ機能を実装。`parseDateMessage`（全角対応・7/21・7月21日・7.21・今日/明日/明後日/今週/来週/今月/来月を解析）・`fetchConfirmedShifts`（Firestoreからstatus=confirmedを取得）・`buildSingleDayReply`・`buildRangeReply`（レスポンス整形）を追加。`handleLineEvent`に日付クエリ処理ブロック③を統合。名前絞り込み対応（「7/21 山田太郎」形式）。LINEの5000字上限に合わせた文字数カット処理も追加。友達追加時の挨拶メッセージにシフト確認コマンドの説明を追記。名前登録成功時の返信に日付クエリ使い方を追記
+
+## 2026-07-20（17回目）
+### 変更内容
+- [front/src/pages/ManualUserPage.tsx] SectionCardコンポーネント化でJSX body対応。開発者向け表記（plan/confirmed等）をJSXコメントに変換。キーワードを太文字化。「申請削除依頼」セクション追加（2段階手順・再申請の説明）。構成を読みやすくリライト
+- [front/src/pages/ManualAdminPage.tsx] 同上。status=plan/boardPublic/runTransaction/VITE_API_BASE_URL等の開発表記をJSXコメントに変換。「申請削除依頼の処理」セクション追加（削除手順・取消不可の警告）。LINE操作・名簿・掲示板・メモの説明を運用視点でリライト
+- [front/src/pages/AdminShiftPage.tsx] 初期フィルターをplan単独→plan+delete_requestの2つに変更（削除依頼を見逃さないよう初期表示に含める）
+
+## 2026-07-20（16回目）
+### 変更内容
+- [firestore.rules] shiftsのupdateルールから`request.auth.token.name`チェックを削除（全ユーザーが共有アカウントのためtokenにnameクレームが存在せず削除依頼が常に拒否されていたバグを修正）
+- [front/src/components/MonthCalendar.tsx] カレンダーセルのラベルを`${memberName}・${subject}`→`subject`のみに変更（subjectが既に「A帯 名前」形式のため名前重複を解消）。getTimeLabel関数追加（template/time別に時間を生成）。DayShiftList詳細にsubject+時間表示追加（memberName行を削除し名前重複解消、delete_requestedバッジ追加）
+
+## 2026-07-20（15回目）
+### 変更内容
+- [front/src/lib/types.ts] ShiftStatusに`'delete_requested'`を追加
+- [front/src/lib/mockStore.ts] requestDeleteShift・deleteShiftメソッド追加、deleteDocの型に`'shifts'`を追加
+- [front/src/lib/db.ts] requestDeleteShift（確定シフトを削除依頼状態に変更）・adminDeleteShift（hard delete）を追加。cancelShiftでdelete_requestedもFORBIDDEN扱いに
+- [front/src/pages/PersonalPage.tsx] 確定タブにdelete_requestedシフトを含め「削除依頼中」バッジ表示。確定シフトに「削除依頼」ボタン追加。2ステップ確認モーダル（1:説明→2:最終確認）追加
+- [front/src/pages/AdminShiftPage.tsx] FilterStatusに`'delete_request'`追加。statusBadgeに「削除依頼」バッジ（赤）追加。フィルターボタンに「削除依頼」追加。doAdminDeleteでhard delete実行。ヘッダーに削除依頼件数表示
+- [front/src/pages/RequestPage.tsx] 日付選択後の曜日表示が`formatDateJP`（既に曜日含む）と`weekdayJP`で2重表示になっていたのを修正（apply・otherモード両方）
+- [front/src/pages/AdminLinePage.tsx] 「バックエンドAPI（Heroku）へ送信します」のp要素をJSXコメントに変換（フロント非表示・コードに保存）
+- [firestore.rules] shiftsのupdateルールを拡張: userは自分の確定シフトをdelete_requestedに限り変更可。deleteルールをisAdmin ||（user＋plan）の形に更新
+
+
+## 2026-07-20（14回目）
+### 変更内容
+- [front/src/lib/config.ts] 新規作成: TemplateCode型・PLACE_OPTIONS・TEMPLATE_LABELS・TEMPLATE_TIMES・SUBJECT_OPTIONSを一元管理（店舗名・件名変更時はここだけ修正）
+- [front/src/lib/types.ts] TEMPLATE_LABELS・TEMPLATE_TIMES・TemplateCodeをconfig.tsに移動し再エクスポート（後方互換維持）
+- [front/src/pages/AdminShiftPage.tsx] 承認時に場所指定モーダルを追加（許可ボタン→場所Select→確定の2ステップ）。PLACE_OPTIONSをconfig.tsから取得。local PLACE_OPTIONS定数削除
+- [front/src/pages/RequestPage.tsx] 場所フィールドをTextInput→Select(プルダウン)に変更、指定なしを初期値。SUBJECT_OPTIONS・PLACE_OPTIONSをconfig.tsから取得
+- [front/src/pages/AdminLinePage.tsx] 開発者向けメッセージ（トークン等の秘匿情報…）をJSXコメントに変換（UIから非表示・コードに保存）
+- [注記] AdminLinePage全体カレンダーのフィルターボタンは13回目コミットで実装済み
+
+## 2026-07-20（13回目）
+### 変更内容
+- [front/index.html] Googleフォント: Noto Sans JP → Zen Kaku Gothic New（Inter維持）
+- [front/tailwind.config.js] fontFamily.sans: 'Zen Kaku Gothic New' に変更
+- [front/package.json] Font Awesome 3パッケージ追加（fontawesome-svg-core/free-solid-svg-icons/react-fontawesome）
+- [front/src/components/ui.tsx] Buttonコンポーネントをグラデーション化（上部18%シェーン効果）＋ホバーscale/shadow＋active縮小アニメーション
+- [front/src/components/UserLayout.tsx] Lucide→Font Awesomeアイコンに刷新（ナビ全5項目・ロゴ・ログアウト）
+- [front/src/components/AdminLayout.tsx] 同上（ナビ全4項目・ロゴ・ユーザーへボタン・ログアウト）
+- [front/src/pages/AdminLinePage.tsx] 全体カレンダー上部に予定/確定/確認済/不可フィルタートグルボタン追加（複数選択）、useMemo追加
+
+## 2026-07-20（12回目）
+### 変更内容
+- [front/src/components/MonthCalendar.tsx] シフト不可（timeType==='none'）をグレー表示（取り消し線なし）で追加、ラベルを「名前 不可」形式に。凡例を動的表示（データに存在するステータスのみ）
+- [front/src/pages/CalendarPage.tsx] 全員表示は確定シフトのみに絞り込み（不可・予定・確認済は非表示）。説明文も更新
+- [front/src/pages/AdminShiftPage.tsx] FilterStatus型追加（plan/confirmed/reviewed/unavailable）。フィルターをSelectからSet<FilterStatus>トグルボタン（複数選択・枠付き）に置き換え。不可フィルター追加。週間サマリーに不可人数カラム追加。不可申請の操作を「確認済に」のみに変更。statusBadgeが不可を判定
+
+## 2026-07-20（11回目）
+### 変更内容
+- [front/src/contexts/AuthContext.tsx] signOut時に名前を`shiftapp.savedName`キーでLocalStorageに保持（次回ログイン自動補完用）
+- [front/src/pages/NameSetupPage.tsx] savedNameがある場合はワンタップ確認UI（「{名前}でログイン」ボタン）を表示、パスワード必須はそのまま
+- [front/src/pages/AdminShiftPage.tsx] 週間人数サマリー（今日〜7日間：確定/予定/確認済の人数）をページ上部に追加
+- [front/src/pages/AdminShiftPage.tsx] 名簿モーダルから「記入日」を削除、「最終送信日」のみ表示
+- [front/src/pages/AdminShiftPage.tsx] 調整モーダルの時間フィールドを常に初期非表示（+ボタンで展開する運用に統一）
+- [front/src/pages/AdminLinePage.tsx] GID管理カードの上に本日のシフト人数・名前一覧を追加（メッセージ作成の参考用）
+
+## 2026-07-20（10回目）
+### 変更内容
+- [front/src/lib/types.ts] `ShiftStatus`に`'reviewed'`（予定確認済）を追加
+- [front/src/components/ui.tsx] `Badge`に`reviewed`カラーを追加（グレー系）
+- [front/src/lib/db.ts] `approveShift`の`deny`をstatus=`reviewed`に変更（削除しない設計）
+- [front/src/lib/mockStore.ts] モックの否認動作も`reviewed`に統一
+- [front/src/components/MonthCalendar.tsx] グラデーション色サポート(`MemberColor`型・`memberColors`prop)追加、`reviewed`ステータス表示（グレー取消線）
+- [front/src/pages/CalendarPage.tsx] フィルタを「自分/全員」の2項目に変更、デフォルト=自分、全員表示時はメンバー別グラデーション色
+- [front/src/pages/RequestPage.tsx] 件名プルダウンを「A帯」「B帯」等の指定文字のみに変更、「給料受取のみ」→「給料受取など」
+- [front/src/components/AdminLayout.tsx] ヘッダーに「ユーザーへ」ボタン追加（サインアウト後/loginへ遷移、パスワード再入力必須）
+- [front/src/components/UserLayout.tsx] 管理者ログインリンクをサインアウト後遷移に変更（行き来時も必ずパスワード要求）
+- [front/src/pages/AdminShiftPage.tsx] デフォルトソートを日付順に、日付ソートタブ追加、reviewedステータス表示・フィルタ追加、調整モーダルに＋/−時間指定トグル追加
+- [front/src/pages/AdminLinePage.tsx] ページ下部に全体シフトカレンダー追加（日付クリックで詳細モーダル）
+- [front/src/pages/PersonalPage.tsx] 予定タブにreviewedシフトを含め、「確認済」バッジ表示
+
+## 2026-07-20（9回目）
+### 変更内容
+- [back/src/app.js] CORS: .vercel.app全サブドメイン＋localhost許可（プレビューURLのCORSブロック解消）
+- [back/src/app.js] グループ送信: GROUP_IDをenv varではなくFirestore config/lineConfigから動的取得（getGroupId関数）
+- [front/src/pages/AdminLinePage.tsx] 送信成功時にテキストエリアをクリア（onSuccessコールバック）、送信失敗時の案内文を全送信カードに追加
+
+## 2026-07-20（8回目）
+### 変更内容
+- [front/src/lib/db.ts] deleteMember関数追加
+- [front/src/pages/AdminShiftPage.tsx] 名簿詳細にメンバー削除ボタン追加（2段階確認UI）、Trash2 import追加
+- [back/src/app.js] 名前登録の競合検知: 名前重複（別LINE ID）・LINE ID重複（別名前）・登録済み・正常登録の4パターンを分岐
+
+## 2026-07-20（7回目）
+### 変更内容
+- [firestore.rules] config/{docId}ルール追加（isUserOrAdmin読取・isAdmin書込）
+- [front/src/lib/db.ts] deleteField import追加、subscribeLineConfig・deleteGroupId関数追加
+- [front/src/pages/AdminShiftPage.tsx] 手動LINE ID入力欄をコメントアウト→LINE IDは表示のみに
+- [front/src/pages/AdminLinePage.tsx] GID管理セクション追加（登録状況表示・削除ボタン）、自分への連絡をadmin登録LINE IDへのDM送信に変更、(admin:名前)表示追加、グループ送信はGID登録時のみ有効化
+- [back/src/app.js] グループ参加自動登録廃止→ログのみ。「グループ登録」メッセージで新規登録/競合検知し管理者DM通知
+
+## 2026-07-20（6回目）
+### 変更内容
+- [front/src/lib/db.ts] approveShift: beforeStateのundefinedを除去（不可シフトのtimeStart等がundefinedでFirestoreエラーになる問題を修正）。updateMemberLineId関数追加（admin用LINE ID手動設定）
+- [front/src/pages/NameSetupPage.tsx] setNameだけでなくupsertMember(Firestore書込)を実際に呼ぶよう修正（本番でmembersコレクションに書き込まれなかったバグを解消）
+- [front/src/pages/AdminShiftPage.tsx] 名簿モーダル: LINE登録状況バッジ（LINE済/未登録）追加、手動LINE ID入力・保存欄追加
+
+## 2026-07-20（5回目）
+### 変更内容
+- [front/src/lib/firebase.ts] API_BASE_URLの末尾スラッシュを除去（//line/selfの404エラー解消）
+- [front/src/pages/AdminShiftPage.tsx] doApprove/doDeny/doAdjustにtry-catchを追加し、Firestoreエラーをトースト表示。doAdjustのadjustFieldsの型を明示的に構築
+
+## 2026-07-20（4回目）
+### 変更内容
+- [front/src/lib/db.ts] createShiftでundefinedプロパティを除外してからaddDoc送信（place: undefined根本修正）
+- [back/src/app.js] webhookログ強化: 一般メッセージ/名前登録試行/名前不一致/名前登録成功を個別にconsole.log、本番URL修正
+
+## 2026-07-20（3回目）
+### 変更内容
+- [front/src/pages/RequestPage.tsx] 文字化け全修正、place: undefined → 条件付きspreadに変更（Firestoreエラー解消）
+- [front/src/pages/AdminShiftPage.tsx] シフト一覧: timeType===time の場合のみ時間表示、不可(none)は時間非表示。調整モーダル: timeType===none の場合に時間フィールドを非表示、doAdjust の timeType/place を条件付きspreadで適切に設定
+- [back/src/app.js] メンバー未発見時にVercel URL＋Firestoreの現在名簿をLINE返信
+
+## 2026-07-20（2回目）
+### 変更内容
+- [front/src/contexts/DataContext.tsx] role/initializingに依存してFirestore再購読（auth前の空データ問題を根本解消）、firestoreErrorをコンテキストに追加
+- [front/src/pages/PersonalPage.tsx] firestoreErrorを画面表示
+- [front/src/pages/RequestPage.tsx] myRecentを全件表示（8件制限撤廃）、firestoreErrorを画面表示
+- [front/src/pages/CalendarPage.tsx] メンバー名・ステータスのフィルタ追加
+- [front/src/pages/AdminShiftPage.tsx] 調整モーダルの場所をInput→4択Select（PLACE_OPTIONS定数）に変更
+- [back/src/app.js] 名前登録トリガーを「名前登録 名前」方式に変更（旧「登録:名前」も互換）、余分な言葉の検出、notifySelfErrorのenv変数チェック強化・JST時刻表記
+
+## 2026-07-21
+### 変更内容
+- [front/src/components/ProtectedRoute.tsx] user/admin両方に名前入力を必須化
+- [front/src/pages/NameSetupPage.tsx] ログイン後リダイレクト先をrole別に分岐（admin→/admin-shift）
+- [front/src/pages/AdminBoardPage.tsx] hardcoded '管理者'をuseAuth().nameに置換
+- [front/src/pages/AdminShiftPage.tsx] 同上 + useAuth import追加
+- [front/src/components/AdminLayout.tsx] ヘッダーに管理者名バッジ表示
+- [front/src/lib/db.ts] cancelShift関数追加（planのみ可・runTransaction版楽観ロック）
+- [front/src/pages/PersonalPage.tsx] planシフトに「申請取消」ボタン追加
+- [front/src/pages/RequestPage.tsx] テンプレートA-D（時間不要）+時間指定の5択に再設計、人数フィールド削除、件名表記を「件名A帯 名前」形式に明確化、キャンセルボタンを最近の申請にも追加
+- [firestore.rules] planステータスのシフト削除をuser/adminに許可（デプロイ済み）
+- [back/src/app.js] webhookエラーとAPIエラーを管理者LINEに通知するnotifySelfError関数追加
+- [CLAUDE.md] デプロイ後まとめ報告ルール・バックエンドgitプッシュ手順を追加
+
+## 2026-07-20
+### 変更内容
+- [front/vercel.json] 新規作成: SPA全ルートをindex.htmlにrewrite（お気に入り直接アクセスの404解消）
+- [front/src/components/UserLayout.tsx] フッターに管理者ログインへの誘導リンクを追加
+- [back/src/app.js] webhookハンドラを実装: LINEテキスト「登録:名前」でFirestore membersにlineUserId保存、グループ参加イベントでgroupIdをconfig/lineConfigに保存
+- [back/package.json] firebase-admin ^12.0.0をdependenciesに追加
+- [back/.gitignore] 新規作成: .envをgit管理から除外
+- [back/] Heroku v10へデプロイ完了
+
+## 2026-07-19
+### 変更内容
+- [front/src/contexts/AuthContext.tsx] doSignIn を getIdTokenResult() ベースに書き換え。onAuthStateChanged でもトークンからロール読み取り、クレーム未設定アカウントは自動サインアウト
+- [firestore.rules] カスタムクレーム（request.auth.token.role）を使ったロールベースのセキュリティルールに全面更新
+- [front/public/] ファビコン5ファイルを public/ に配置
+- [front/index.html] favicon.ico / favicon-32x32.png / apple-touch-icon.png のリンクタグ追加
+- [front/src/pages/RequestPage.tsx] シフト不可を週単位申請（月〜日まとめて7件送信）に変更。シフト申請の時間選択を15分刻みのセレクトに変更。件名をA帯〜D帯の選択式に変更し、送信時は「件名 名前」形式で保存
+- [CLAUDE.md] 開発ルール（修正後の自動Push・CHANGELOG記録）を追記。残タスク更新

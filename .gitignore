@@ -1,0 +1,50 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+firebase-debug.log*
+firebase-debug.*.log*
+
+# Firebase cache
+.firebase/
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Dependency directories
+node_modules/
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# dotenv environment variables file
+.env
+.env.local
+.env.*.local
+
+# dataconnect generated files
+.dataconnect
+
+# Firebase service account key（絶対にコミットしない）
+*-firebase.json
+serviceAccountKey.json
+
+# ビルド成果物
+dist/
+build/
+
+# 旧ファイル
+old/
+
+# Vite
+front/.env
+front/.env.local
+back/.env
