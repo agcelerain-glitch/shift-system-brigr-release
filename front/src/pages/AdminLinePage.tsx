@@ -6,34 +6,34 @@ import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { Card, Button, FloatTextarea, Select, Badge, Modal } from '../components/ui';
-import { Send, Bell, MessageCircle, Megaphone, Users, Info, Trash2, Wifi, WifiOff, CalendarDays, Plus, X } from 'lucide-react';
+import { Send, Bell, MessageCircle, Megaphone, Users, Info, Trash2, Wifi, WifiOff, CalendarDays, X } from 'lucide-react';
 import { callLineApi, subscribeLineConfig, deleteGroupId } from '../lib/db';
 import { isFirebaseConfigured, API_BASE_URL } from '../lib/firebase';
 import { formatDateJP, todayStr } from '../lib/utils';
 import { MonthCalendar, DayShiftList } from '../components/MonthCalendar';
 import { PLACE_OPTIONS } from '../lib/config';
 
-const POSITION_OPTIONS = [
-  { value: '付け回し',   label: '付け回し',           hasCustom: false },
-  { value: 'キャシャーン', label: 'キャシャーン',         hasCustom: false },
-  { value: 'フロント',   label: 'フロント',            hasCustom: false },
-  { value: 'ホール長',   label: 'ホール長',            hasCustom: false },
-  { value: 'ホール',    label: 'ホール',              hasCustom: false },
-  { value: 'ストッカー', label: 'ストッカー',           hasCustom: false },
-  { value: 'other1',   label: 'その他（自由記入①）',    hasCustom: true  },
-  { value: 'other2',   label: 'その他（自由記入②）',    hasCustom: true  },
+// 配置テンプレート（固定順序）
+const TEMPLATE_POSITIONS = [
+  '付け回し', 'キャシャーン', 'フロント', 'ホール長', 'ホール', 'ストッカー', 'other1', 'other2',
 ] as const;
 
 type PositionRow = {
   id: string;
   position: string;
-  positionCustom: string;
-  selectedMembers: string[];
-  freeInputName: string;
+  positionCustom: string;     // other1/other2 の自由記入名
+  selectedMembers: string[];  // チップ選択したメンバー名
+  freeInputName: string;      // 直接入力（急な交代など）
 };
 
-function newPosRow(): PositionRow {
-  return { id: Math.random().toString(36).slice(2), position: '', positionCustom: '', selectedMembers: [], freeInputName: '' };
+function initPosRows(): PositionRow[] {
+  return TEMPLATE_POSITIONS.map((pos) => ({
+    id: pos,
+    position: pos,
+    positionCustom: '',
+    selectedMembers: [],
+    freeInputName: '',
+  }));
 }
 
 export function AdminLinePage() {
@@ -47,7 +47,7 @@ export function AdminLinePage() {
   // 当日ポジション配置
   const [posPlace, setPosPlace] = useState('');
   const [posPlaceCustom, setPosPlaceCustom] = useState('');
-  const [posRows, setPosRows] = useState<PositionRow[]>([newPosRow()]);
+  const [posRows, setPosRows] = useState<PositionRow[]>(initPosRows);
   const [posMemo, setPosMemo] = useState('');
   // セルフ通知
   const [selfMsg, setSelfMsg] = useState('');
@@ -123,8 +123,8 @@ export function AdminLinePage() {
       if (!posName) continue;
       const persons: string[] = [...row.selectedMembers];
       row.freeInputName.split(/[,、]/).map((n) => n.trim()).filter(Boolean).forEach((n) => persons.push(n));
-      const personStr = persons.length > 0 ? persons.join('、') : '—';
-      msg += `\n▸ ${posName}: ${personStr}`;
+      if (persons.length === 0) continue;
+      msg += `\n▸ ${posName}: ${persons.join('、')}`;
     }
     if (posMemo.trim()) msg += `\n\n${posMemo.trim()}`;
     return msg;
@@ -309,99 +309,101 @@ export function AdminLinePage() {
             )}
           </div>
 
-          {/* 配置行 */}
-          <div className="space-y-2 mb-3">
-            {posRows.map((row, idx) => (
-              <div key={row.id} className="border border-gray-200 rounded-xl p-3 bg-gray-50">
-                {/* 行ヘッダー */}
-                <div className="flex items-center mb-2">
-                  <span className="text-xs font-medium text-gray-400">配置 {idx + 1}</span>
-                  {posRows.length > 1 && (
-                    <button
-                      onClick={() => setPosRows((prev) => prev.filter((r) => r.id !== row.id))}
-                      className="ml-auto text-gray-300 hover:text-red-400 transition-colors"
-                      aria-label="この行を削除"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
+          {/* 配置行（固定テンプレート） */}
+          <div className="space-y-3 mb-3">
+            {posRows.map((row) => {
+              const isOther = row.position === 'other1' || row.position === 'other2';
+              const posLabel = isOther
+                ? (row.position === 'other1' ? 'その他①' : 'その他②')
+                : row.position;
+              const hasContent =
+                row.selectedMembers.length > 0 ||
+                row.freeInputName.trim() !== '' ||
+                (isOther && row.positionCustom.trim() !== '');
 
-                {/* 配置プルダウン */}
-                <Select
-                  value={row.position}
-                  onChange={(e) => setPosRows((prev) => prev.map((r) =>
-                    r.id === row.id ? { ...r, position: e.target.value, positionCustom: '' } : r
-                  ))}
-                  className="mb-2"
+              return (
+                <div
+                  key={row.id}
+                  className={`border-l-4 rounded-r-2xl p-4 transition-colors ${
+                    hasContent
+                      ? 'border-blue-400 bg-blue-50'
+                      : 'border-gray-200 bg-gray-50'
+                  }`}
                 >
-                  <option value="">配置を選択</option>
-                  {POSITION_OPTIONS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
-                </Select>
+                  {/* ポジション名 + クリアボタン */}
+                  <div className="flex items-center justify-between mb-3">
+                    <span className={`text-base font-bold ${hasContent ? 'text-blue-800' : 'text-gray-400'}`}>
+                      {posLabel}
+                    </span>
+                    {hasContent && (
+                      <button
+                        type="button"
+                        onClick={() => setPosRows((prev) => prev.map((r) =>
+                          r.id !== row.id ? r : { ...r, selectedMembers: [], freeInputName: '', positionCustom: '' }
+                        ))}
+                        className="flex items-center gap-1 text-xs text-gray-400 hover:text-red-400 transition-colors"
+                        aria-label="クリア"
+                      >
+                        <X className="w-3.5 h-3.5" />クリア
+                      </button>
+                    )}
+                  </div>
 
-                {/* その他の自由記入 */}
-                {(row.position === 'other1' || row.position === 'other2') && (
+                  {/* その他①② の配置名入力 */}
+                  {isOther && (
+                    <input
+                      type="text"
+                      value={row.positionCustom}
+                      onChange={(e) => setPosRows((prev) => prev.map((r) =>
+                        r.id === row.id ? { ...r, positionCustom: e.target.value } : r
+                      ))}
+                      placeholder={`${posLabel}の配置名を入力…`}
+                      className="mb-3 w-full text-base border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+                    />
+                  )}
+
+                  {/* 担当者チップ（確定メンバー） */}
+                  {todayConfirmedMembers.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {todayConfirmedMembers.map((name) => {
+                        const selected = row.selectedMembers.includes(name);
+                        return (
+                          <button
+                            key={name}
+                            type="button"
+                            onClick={() => setPosRows((prev) => prev.map((r) => r.id !== row.id ? r : {
+                              ...r,
+                              selectedMembers: selected
+                                ? r.selectedMembers.filter((n) => n !== name)
+                                : [...r.selectedMembers, name],
+                            }))}
+                            className={`text-sm px-4 py-2.5 rounded-full font-medium border-2 transition-all min-w-[4rem] text-center ${
+                              selected
+                                ? 'border-blue-500 bg-blue-500 text-white shadow-sm'
+                                : 'border-gray-300 bg-white text-gray-700 active:bg-gray-50'
+                            }`}
+                          >
+                            {name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* 直接入力（急な交代・未登録者） */}
                   <input
                     type="text"
-                    value={row.positionCustom}
+                    value={row.freeInputName}
                     onChange={(e) => setPosRows((prev) => prev.map((r) =>
-                      r.id === row.id ? { ...r, positionCustom: e.target.value } : r
+                      r.id === row.id ? { ...r, freeInputName: e.target.value } : r
                     ))}
-                    placeholder="配置名を入力..."
-                    className="mb-2 w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    placeholder="急な交代・未登録者はここに入力（,区切りで複数可）"
+                    className="w-full text-base border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
                   />
-                )}
-
-                {/* 担当者: 確定メンバーをチップで選択 */}
-                {todayConfirmedMembers.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mb-2">
-                    {todayConfirmedMembers.map((name) => {
-                      const selected = row.selectedMembers.includes(name);
-                      return (
-                        <button
-                          key={name}
-                          type="button"
-                          onClick={() => setPosRows((prev) => prev.map((r) => r.id !== row.id ? r : {
-                            ...r,
-                            selectedMembers: selected
-                              ? r.selectedMembers.filter((n) => n !== name)
-                              : [...r.selectedMembers, name],
-                          }))}
-                          className={`text-xs px-2.5 py-1 rounded-full font-medium border-2 transition-all ${
-                            selected
-                              ? 'border-blue-500 bg-blue-100 text-blue-700'
-                              : 'border-gray-200 bg-white text-gray-500 hover:border-blue-300'
-                          }`}
-                        >
-                          {name}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* 担当者: 自由入力（急な交代など） */}
-                <input
-                  type="text"
-                  value={row.freeInputName}
-                  onChange={(e) => setPosRows((prev) => prev.map((r) =>
-                    r.id === row.id ? { ...r, freeInputName: e.target.value } : r
-                  ))}
-                  placeholder="直接入力（,区切りで複数可）"
-                  className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
-                />
-              </div>
-            ))}
+                </div>
+              );
+            })}
           </div>
-
-          {/* 配置追加ボタン */}
-          <button
-            type="button"
-            onClick={() => setPosRows((prev) => [...prev, newPosRow()])}
-            className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl border-2 border-dashed border-blue-300 text-blue-600 text-sm font-medium hover:bg-blue-50 transition-colors mb-3"
-          >
-            <Plus className="w-4 h-4" />配置を追加する
-          </button>
 
           {/* 任意メモ */}
           <FloatTextarea
@@ -426,13 +428,13 @@ export function AdminLinePage() {
               onClick={() => {
                 const message = buildPositionMessage();
                 send('/line/group/position', { message }, '当日配置', () => {
-                  setPosRows([newPosRow()]);
+                  setPosRows(initPosRows());
                   setPosMemo('');
                   setPosPlace('');
                   setPosPlaceCustom('');
                 });
               }}
-              disabled={sending || !groupId || posRows.every((r) => !r.position)}
+              disabled={sending || !groupId || posRows.every((r) => r.selectedMembers.length === 0 && !r.freeInputName.trim())}
               title={!groupId ? 'GIDが未登録です' : undefined}
             >
               <Send className="w-4 h-4" />送信

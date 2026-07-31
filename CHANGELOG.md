@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 2026-07-31（35回目）
+### 変更内容
+- [front/src/pages/AdminLinePage.tsx] グループ送信②配置行を固定テンプレート方式に変更。付け回し/キャシャーン/フロント/ホール長/ホール/ストッカー/その他①②の8行が常時表示される順番固定レイアウトに
+- [front/src/pages/AdminLinePage.tsx] 老眼対応UI: 配置名ラベルtext-base/bold、メンバーチップtext-sm+py-2.5（大タッチ領域）、直接入力欄text-base+py-3に拡大
+- [front/src/pages/AdminLinePage.tsx] 配置行の状態管理: コンテンツありの行は左ボーダー青+背景青、行ごとのクリアボタン追加。空行はメッセージから自動スキップ
+- [front/src/pages/AdminLinePage.tsx] 送信後は全行をクリーンな初期テンプレートにリセット
+### デプロイ
+- GitHub (origin/main): プッシュ済み（Vercel自動デプロイ）
+
 ## 2026-07-31（34回目）
 ### 変更内容
 - [front/src/pages/AdminLinePage.tsx] グループ送信①タイトルを「シフト連絡など」に変更。FloatTextareaのプレースホルダーをLINE自動応答ヒントに変更
