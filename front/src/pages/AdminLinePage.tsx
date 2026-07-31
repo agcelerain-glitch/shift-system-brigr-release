@@ -89,7 +89,7 @@ export function AdminLinePage() {
   };
 
   const handleDeleteGid = async () => {
-    if (!window.confirm(`GID「${groupId}」を削除しますか？\n削除後はグループで「グループ登録」と送信して再登録してください。`)) return;
+    if (!window.confirm('登録済のGIDを削除しますか？\n削除後はグループで「グループ登録」と送信して再登録してください。')) return;
     setDeletingGid(true);
     try {
       await deleteGroupId();
@@ -169,8 +169,8 @@ export function AdminLinePage() {
               <Badge color="red">GID未登録</Badge>
             )}
             <span className="text-xs font-medium text-gray-700">LINEグループID</span>
-            <span className="text-xs font-mono text-gray-500 break-all">
-              {groupId === undefined ? '…' : groupId ?? '—'}
+            <span className="text-xs font-mono text-gray-500">
+              {groupId === undefined ? '…' : groupId ? '********************' : '—'}
             </span>
           </div>
           {groupId && (

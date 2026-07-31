@@ -27,18 +27,42 @@ async function getGroupId() {
   return process.env.LINE_GROUP_ID || null;
 }
 
+// FIREBASE_PRIVATE_KEY の堅牢なパース
+// Herokuダッシュボードでのコピペ時にダブルクォートや\\nが混入しやすいため多重対応
+function parseFirebasePrivateKey(raw) {
+  if (!raw) return null;
+  let key = raw.trim();
+  // ダブルクォート囲みを除去（JSON文字列として貼り付けた場合）
+  if (key.startsWith('"') && key.endsWith('"')) {
+    try { key = JSON.parse(key); } catch { key = key.slice(1, -1); }
+  }
+  // シングルクォート囲みを除去
+  if (key.startsWith("'") && key.endsWith("'")) key = key.slice(1, -1);
+  // リテラル \n（2文字）を実際の改行に変換
+  key = key.replace(/\\n/g, '\n');
+  // Windows改行を正規化
+  key = key.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  return key;
+}
+
 // Firebase Admin初期化（環境変数から認証情報を読み込む）
 if (!admin.apps.length) {
   const projectId = process.env.FIREBASE_PROJECT_ID;
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+  const privateKey = parseFirebasePrivateKey(process.env.FIREBASE_PRIVATE_KEY);
 
   if (projectId && clientEmail && privateKey) {
-    admin.initializeApp({
-      credential: admin.credential.cert({ projectId, clientEmail, privateKey }),
-    });
+    try {
+      admin.initializeApp({
+        credential: admin.credential.cert({ projectId, clientEmail, privateKey }),
+      });
+      console.log('[Firebase Admin] 初期化成功: projectId=' + projectId);
+    } catch (e) {
+      console.error('[Firebase Admin] 初期化失敗:', e?.message ?? e);
+      console.error('[Firebase Admin] 秘密鍵の先頭行:', privateKey.split('\n')[0]);
+    }
   } else {
-    console.warn('Firebase Admin未設定: FIREBASE_PROJECT_ID / FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY が必要です');
+    console.warn('[Firebase Admin] 未設定: FIREBASE_PROJECT_ID / FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY が必要です');
   }
 }
 
@@ -475,10 +499,17 @@ async function handleLineEvent(event) {
     return;
   }
 
-  // グループ参加: ログのみ
+  // グループ参加: 案内メッセージを返信
   if (event.type === 'join' && event.source?.type === 'group') {
-    const groupId = event.source.groupId;
-    console.log(`[webhook] グループ参加: groupId=${groupId} → グループ内で「グループ登録」と送信して登録してください`);
+    console.log(`[webhook] グループ参加: groupId=${event.source.groupId}`);
+    try {
+      await client.replyMessage({
+        replyToken: event.replyToken,
+        messages: [{ type: 'text', text: 'シフト管理システムBotが参加しました。\n\n管理者がこのグループで「グループ登録」と送信すると、グループへのシフト連絡が有効になります。' }],
+      });
+    } catch (e) {
+      console.warn('[webhook] グループ参加返信失敗:', e?.message);
+    }
     return;
   }
 

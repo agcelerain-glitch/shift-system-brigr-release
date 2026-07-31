@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 2026-07-31（32回目）
+### 変更内容
+- [back/src/app.js] parseFirebasePrivateKey()関数を追加。Herokuダッシュボードでのコピペ時に混入するダブルクォートや\\nリテラルを堅牢に除去し、OpenSSL 3.x（Node.js 22）でのデコードエラー（error:1E08010C）を修正
+- [back/src/app.js] Firebase Admin初期化にtry-catchを追加。初期化失敗時に秘密鍵の先頭行をログ出力して診断を容易に
+- [back/src/app.js] グループ参加（joinイベント）時に「グループ登録」を促す案内メッセージをグループへ返信するよう変更（従来はログのみ）
+- [front/src/pages/AdminLinePage.tsx] GID表示を`********************`にマスク（実際のIDはFirestoreのみで管理）。削除確認ダイアログからも実際のGIDを除去
+### デプロイ
+- GitHub (origin/main): フロント変更をプッシュ（Vercel自動デプロイ）
+- Heroku: back/をプッシュ（Firebase秘密鍵パース修正）
+
 ## 2026-07-31（31回目）
 ### 変更内容
 - [front/src/lib/config.ts] TEMPLATE_TIMES更新（A:20:00-LAST / B:20:30-26:00 / C:21:30-LAST / D:22:00-26:00）。SUBJECT_OPTIONSのラベルにTEMPLATE_TIMESの時間帯を自動表示するよう変更
