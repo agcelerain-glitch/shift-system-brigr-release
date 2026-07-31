@@ -5,7 +5,7 @@
 export type TemplateCode = 'A' | 'B' | 'C' | 'D';
 
 // ---- 場所選択肢（「指定なし」はUI側で先頭に追加） ----
-export const PLACE_OPTIONS = ['本店', '支店A', '支店B', '倉庫'] as const;
+export const PLACE_OPTIONS = ['ブリジャール', 'ルチア', 'セラス', 'ルミ・ベガ'] as const;
 export type PlaceOption = typeof PLACE_OPTIONS[number];
 
 // ---- テンプレートA〜Dの表示ラベル ----

@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 2026-07-31（33回目）
+### 変更内容
+- [front/src/lib/config.ts] PLACE_OPTIONSを実店舗名に差し替え（本店/支店A/支店B/倉庫 → ブリジャール/ルチア/セラス/ルミ・ベガ）。RequestPage・AdminShiftPageのプルダウンは自動反映
+- [front/src/lib/mockStore.ts] 開発用モックデータのplace値を'ブリジャール'に更新
+- ManualUserPage・ManualAdminPage・AdminShiftPage・バックエンドはいずれも場所名ハードコードなし。Firestoreの既存レコードは旧名称のまま残存（判別可能）
+### デプロイ
+- GitHub (origin/main): プッシュ済み（Vercel自動デプロイ）
+
 ## 2026-07-31（32回目）
 ### 変更内容
 - [back/src/app.js] parseFirebasePrivateKey()関数を追加。Herokuダッシュボードでのコピペ時に混入するダブルクォートや\\nリテラルを堅牢に除去し、OpenSSL 3.x（Node.js 22）でのデコードエラー（error:1E08010C）を修正

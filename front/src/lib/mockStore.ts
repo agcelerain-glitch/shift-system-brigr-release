@@ -27,11 +27,11 @@ const seedMembers: Member[] = [
 const seedShifts: Shift[] = [
   {
     id: 's1', memberName: '山田 花子', date: todayStr(), status: 'confirmed', timeType: 'template', template: 'A',
-    subject: 'レジ担当', place: '本店', headcount: 2, createdAt: Date.now() - 5 * DAY, updatedAt: Date.now() - 2 * DAY, version: 2,
+    subject: 'レジ担当', place: 'ブリジャール', headcount: 2, createdAt: Date.now() - 5 * DAY, updatedAt: Date.now() - 2 * DAY, version: 2,
   },
   {
     id: 's2', memberName: '佐藤 健太', date: todayStr(), status: 'confirmed', timeType: 'template', template: 'C',
-    subject: '品出し', place: '本店', headcount: 1, createdAt: Date.now() - 4 * DAY, updatedAt: Date.now() - 1 * DAY, version: 2,
+    subject: '品出し', place: 'ブリジャール', headcount: 1, createdAt: Date.now() - 4 * DAY, updatedAt: Date.now() - 1 * DAY, version: 2,
   },
   {
     id: 's3', memberName: '鈴木 美咲', date: addDays(1), status: 'plan', timeType: 'time', timeStart: '10:00', timeEnd: '15:00',
@@ -39,7 +39,7 @@ const seedShifts: Shift[] = [
   },
   {
     id: 's4', memberName: '高橋 涼介', date: addDays(1), status: 'confirmed', timeType: 'template', template: 'B',
-    subject: '品出し', place: '本店', headcount: 1, createdAt: Date.now() - 3 * DAY, updatedAt: Date.now() - 1 * DAY, version: 2,
+    subject: '品出し', place: 'ブリジャール', headcount: 1, createdAt: Date.now() - 3 * DAY, updatedAt: Date.now() - 1 * DAY, version: 2,
   },
   {
     id: 's5', memberName: '渡辺 陽菜', date: addDays(2), status: 'plan', timeType: 'other',
@@ -47,15 +47,15 @@ const seedShifts: Shift[] = [
   },
   {
     id: 's6', memberName: '山田 花子', date: addDays(3), status: 'plan', timeType: 'time', timeStart: '14:00', timeEnd: '19:00',
-    subject: 'レジ担当', place: '本店', headcount: 2, createdAt: Date.now() - 1 * DAY, updatedAt: Date.now() - 1 * DAY, version: 1,
+    subject: 'レジ担当', place: 'ブリジャール', headcount: 2, createdAt: Date.now() - 1 * DAY, updatedAt: Date.now() - 1 * DAY, version: 1,
   },
   {
     id: 's7', memberName: '佐藤 健太', date: addDays(-1), status: 'confirmed', timeType: 'template', template: 'A',
-    subject: 'レジ担当', place: '本店', headcount: 2, createdAt: Date.now() - 6 * DAY, updatedAt: Date.now() - 3 * DAY, version: 2,
+    subject: 'レジ担当', place: 'ブリジャール', headcount: 2, createdAt: Date.now() - 6 * DAY, updatedAt: Date.now() - 3 * DAY, version: 2,
   },
   {
     id: 's8', memberName: '鈴木 美咲', date: todayStr(), status: 'plan', timeType: 'time', timeStart: '12:00', timeEnd: '17:00',
-    subject: '品出し', place: '本店', headcount: 1, createdAt: Date.now() - 1 * DAY, updatedAt: Date.now() - 1 * DAY, version: 1,
+    subject: '品出し', place: 'ブリジャール', headcount: 1, createdAt: Date.now() - 1 * DAY, updatedAt: Date.now() - 1 * DAY, version: 1,
   },
 ];
 
