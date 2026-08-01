@@ -652,38 +652,97 @@ export function AdminShiftPage() {
       </Modal>
 
       {/* 復元ログモーダル */}
-      <Modal open={logOpen} onClose={() => setLogOpen(false)} title="承認ログ（7日以内復元可）">
-        {approvalLogs.length === 0 ? (
-          <EmptyState icon={<History className="w-8 h-8" />} title="承認ログはありません" />
-        ) : (
-          <div className="space-y-2">
-            {approvalLogs.map((log) => {
-              const expired = !isPast7Days(log.createdAt);
-              const before = log.beforeState;
-              return (
-                <div key={log.id} className="p-3 rounded-lg border border-gray-100">
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-2">
-                      <Badge color={log.action === 'approve' ? 'confirmed' : log.action === 'deny' ? 'reviewed' : 'blue'}>
-                        {log.action === 'approve' ? '許可' : log.action === 'deny' ? '否認' : '調整'}
-                      </Badge>
-                      <span className="text-xs text-gray-500">{formatDateTimeJP(log.createdAt)}</span>
-                    </div>
-                    <Button size="sm" variant="ghost" disabled={expired} onClick={() => doRestore(log)}>
-                      <RotateCcw className="w-3.5 h-3.5" />復元
-                    </Button>
+      <Modal open={logOpen} onClose={() => setLogOpen(false)} title="削除依頼・承認ログ">
+        {(() => {
+          const deleteReqs = shifts.filter((s) => s.status === 'delete_requested');
+          const hasDeleteReqs = deleteReqs.length > 0;
+          const hasLogs = approvalLogs.length > 0;
+
+          if (!hasDeleteReqs && !hasLogs) {
+            return <EmptyState icon={<History className="w-8 h-8" />} title="ログはありません" />;
+          }
+
+          return (
+            <div className="space-y-4">
+              {/* 削除依頼中のシフト（現行情報） */}
+              {hasDeleteReqs && (
+                <div>
+                  <p className="text-xs font-semibold text-rose-600 mb-2 flex items-center gap-1">
+                    <Trash2 className="w-3.5 h-3.5" />削除依頼中のシフト（現行情報）
+                  </p>
+                  <div className="space-y-2">
+                    {deleteReqs.map((s) => {
+                      const timeLabel = timeLabelOf(s);
+                      return (
+                        <div key={s.id} className="p-3 rounded-lg border border-rose-200 bg-rose-50">
+                          <div className="flex items-start justify-between gap-2 flex-wrap">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-900">{s.memberName}</p>
+                              <p className="text-xs text-gray-600">{formatDateJP(s.date)} · {s.subject}</p>
+                              <div className="flex flex-wrap gap-x-2 text-xs text-gray-500 mt-0.5">
+                                {timeLabel && <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{timeLabel}</span>}
+                                {s.place && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{s.place}</span>}
+                              </div>
+                            </div>
+                            <div className="flex gap-1.5 shrink-0 flex-wrap">
+                              <Button size="sm" variant="secondary" onClick={() => { setLogOpen(false); openAdjust(s); }}>
+                                <Sliders className="w-3.5 h-3.5" />削除せず修正
+                              </Button>
+                              <Button size="sm" variant="danger" onClick={() => doAdminDelete(s)}>
+                                <Trash2 className="w-3.5 h-3.5" />削除
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                  {before && (
-                    <p className="text-xs text-gray-600">
-                      {before.memberName} · {formatDateJP(before.date)} · {before.subject} ({before.status === 'confirmed' ? '確定' : before.status === 'reviewed' ? '確認済' : '予定'})
-                    </p>
-                  )}
-                  {expired && <p className="text-[10px] text-gray-400 mt-1">7日経過のため復元不可</p>}
                 </div>
-              );
-            })}
-          </div>
-        )}
+              )}
+
+              {/* 承認ログ */}
+              {hasLogs && (
+                <div>
+                  {hasDeleteReqs && (
+                    <>
+                      <div className="border-t border-gray-200 my-1" />
+                      <p className="text-xs font-semibold text-gray-500 mb-2 flex items-center gap-1">
+                        <History className="w-3.5 h-3.5" />承認ログ（7日以内復元可）
+                      </p>
+                    </>
+                  )}
+                  <div className="space-y-2">
+                    {approvalLogs.map((log) => {
+                      const expired = !isPast7Days(log.createdAt);
+                      const before = log.beforeState;
+                      return (
+                        <div key={log.id} className="p-3 rounded-lg border border-gray-100">
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="flex items-center gap-2">
+                              <Badge color={log.action === 'approve' ? 'confirmed' : log.action === 'deny' ? 'reviewed' : 'blue'}>
+                                {log.action === 'approve' ? '許可' : log.action === 'deny' ? '否認' : '調整'}
+                              </Badge>
+                              <span className="text-xs text-gray-500">{formatDateTimeJP(log.createdAt)}</span>
+                            </div>
+                            <Button size="sm" variant="ghost" disabled={expired} onClick={() => doRestore(log)}>
+                              <RotateCcw className="w-3.5 h-3.5" />復元
+                            </Button>
+                          </div>
+                          {before && (
+                            <p className="text-xs text-gray-600">
+                              {before.memberName} · {formatDateJP(before.date)} · {before.subject} ({before.status === 'confirmed' ? '確定' : before.status === 'reviewed' ? '確認済' : '予定'})
+                            </p>
+                          )}
+                          {expired && <p className="text-[10px] text-gray-400 mt-1">7日経過のため復元不可</p>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </Modal>
     </AdminLayout>
   );
