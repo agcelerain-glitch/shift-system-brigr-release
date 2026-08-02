@@ -80,6 +80,13 @@ export function AdminShiftPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingMember, setDeletingMember] = useState(false);
   const [summarySelectedDate, setSummarySelectedDate] = useState<string | null>(null);
+  // 調整マーク（プレビューで名前タップしてマーク）: 復元ログにも反映
+  const [markedMembers, setMarkedMembers] = useState<Set<string>>(new Set());
+  const toggleMark = (memberName: string) =>
+    setMarkedMembers((prev) => { const next = new Set(prev); next.has(memberName) ? next.delete(memberName) : next.add(memberName); return next; });
+  // 復元ログ用の検索・ソート
+  const [logSearch, setLogSearch] = useState('');
+  const [logSortKey, setLogSortKey] = useState<'date' | 'place' | 'name'>('date');
 
   // 承認時の場所指定モーダル
   const [approvingShift, setApprovingShift] = useState<Shift | null>(null);
@@ -174,6 +181,61 @@ export function AdminShiftPage() {
       };
     });
   }, [shifts, today]);
+
+  // 選択日のシフトを 場所 → 帯 でグループ化したピボットデータ
+  const pivotData = useMemo(() => {
+    if (!summarySelectedDate) return [];
+    const dayShifts = shifts
+      .filter((s) => s.date === summarySelectedDate && s.timeType !== 'none')
+      .sort((a, b) => {
+        const pa = a.place ?? '￿';
+        const pb = b.place ?? '￿';
+        if (pa !== pb) return pa.localeCompare(pb, 'ja');
+        return timeSortVal(a) - timeSortVal(b);
+      });
+    const placeMap = new Map<string, Shift[]>();
+    for (const s of dayShifts) {
+      const place = s.place ?? '';
+      if (!placeMap.has(place)) placeMap.set(place, []);
+      placeMap.get(place)!.push(s);
+    }
+    return Array.from(placeMap.entries()).map(([place, pShifts]) => {
+      const timeMap = new Map<string, Shift[]>();
+      for (const s of pShifts) {
+        const label = timeLabelOf(s) || '時間未設定';
+        if (!timeMap.has(label)) timeMap.set(label, []);
+        timeMap.get(label)!.push(s);
+      }
+      return {
+        place,
+        total: pShifts.length,
+        timeGroups: Array.from(timeMap.entries()).map(([label, members]) => ({ label, members })),
+      };
+    });
+  }, [summarySelectedDate, shifts]);
+
+  // 復元ログ: 検索・ソート済みリスト
+  const filteredLogs = useMemo(() => {
+    let logs = [...approvalLogs];
+    if (logSearch.trim()) {
+      const q = logSearch.toLowerCase();
+      logs = logs.filter((log) =>
+        (log.beforeState?.memberName ?? '').toLowerCase().includes(q) ||
+        (log.beforeState?.place ?? '').toLowerCase().includes(q) ||
+        (log.beforeState?.date ?? '').includes(q),
+      );
+    }
+    logs.sort((a, b) => {
+      const ba = a.beforeState;
+      const bb = b.beforeState;
+      switch (logSortKey) {
+        case 'date':  return (bb?.date ?? '').localeCompare(ba?.date ?? '');
+        case 'place': return (ba?.place ?? '').localeCompare(bb?.place ?? '', 'ja');
+        case 'name':  return (ba?.memberName ?? '').localeCompare(bb?.memberName ?? '', 'ja');
+      }
+    });
+    return logs;
+  }, [approvalLogs, logSearch, logSortKey]);
 
   const doAdminDelete = async (s: Shift) => {
     if (!window.confirm(`${s.memberName}さんの「${formatDateJP(s.date)} ${s.subject}」を完全削除しますか？\nこの操作は取り消せません。`)) return;
@@ -324,6 +386,77 @@ export function AdminShiftPage() {
           ))}
         </div>
       </Card>
+
+      {/* 日付タップ時のインラインプレビュー（ピボットテーブル形式） */}
+      {summarySelectedDate && (
+        <Card className="p-4 mb-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-semibold text-gray-700">
+              {formatDateJP(summarySelectedDate)} のシフト詳細
+            </p>
+            <div className="flex items-center gap-2">
+              {markedMembers.size > 0 && (
+                <span className="text-xs text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full border border-orange-200">
+                  調整対象 {markedMembers.size}人
+                </span>
+              )}
+              <button
+                onClick={() => setSummarySelectedDate(null)}
+                className="text-xs text-gray-400 hover:text-gray-600 px-2 py-0.5 rounded-lg hover:bg-gray-100"
+              >
+                閉じる
+              </button>
+            </div>
+          </div>
+          {pivotData.length === 0 ? (
+            <p className="text-sm text-gray-400">この日のシフトはありません</p>
+          ) : (
+            <div className="space-y-2">
+              {pivotData.map((group) => (
+                <div key={group.place} className="border border-gray-100 rounded-xl overflow-hidden">
+                  {/* 場所ヘッダー */}
+                  <div className="flex items-center justify-between px-3 py-2 bg-gray-50">
+                    <span className="flex items-center gap-1.5 text-sm font-semibold text-gray-700">
+                      <MapPin className="w-3.5 h-3.5 text-gray-400" />
+                      {group.place || '場所未設定'}
+                    </span>
+                    <span className="text-xs text-gray-500 bg-white px-2 py-0.5 rounded-full border border-gray-200">
+                      計{group.total}人
+                    </span>
+                  </div>
+                  {/* 帯 × 名前バッジ */}
+                  <div className="divide-y divide-gray-50">
+                    {group.timeGroups.map((tg) => (
+                      <div key={tg.label} className="flex items-start gap-2 px-3 py-2.5">
+                        <span className="text-xs text-gray-400 w-24 shrink-0 pt-1">{tg.label}</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {tg.members.map((s) => (
+                            <button
+                              key={s.id}
+                              onClick={() => toggleMark(s.memberName)}
+                              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+                                markedMembers.has(s.memberName)
+                                  ? 'bg-orange-500 text-white ring-2 ring-orange-300 shadow-sm'
+                                  : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                              }`}
+                            >
+                              {s.memberName}
+                              {markedMembers.has(s.memberName) && (
+                                <span className="ml-1 text-orange-100 text-xs">調整</span>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              <p className="text-[10px] text-gray-400 mt-1 px-1">名前をタップすると調整マークが付きます（復元ログにも反映）</p>
+            </div>
+          )}
+        </Card>
+      )}
 
       {/* ソートタブ + フィルタ */}
       <Card className="p-3 mb-4">
@@ -634,57 +767,6 @@ export function AdminShiftPage() {
         )}
       </Modal>
 
-      {/* 週間サマリー 日付詳細モーダル */}
-      <Modal
-        open={summarySelectedDate !== null}
-        onClose={() => setSummarySelectedDate(null)}
-        title={summarySelectedDate ? `${formatDateJP(summarySelectedDate)} のシフト` : ''}
-      >
-        {summarySelectedDate && (() => {
-          const dayShifts = shifts
-            .filter((s) => s.date === summarySelectedDate && s.timeType !== 'none')
-            .sort((a, b) => {
-              const order: Record<string, number> = { confirmed: 0, plan: 1, reviewed: 2, delete_requested: 3 };
-              return (order[a.status] ?? 9) - (order[b.status] ?? 9) || timeSortVal(a) - timeSortVal(b);
-            });
-          const unavailShifts = shifts.filter((s) => s.date === summarySelectedDate && s.timeType === 'none');
-
-          if (dayShifts.length === 0 && unavailShifts.length === 0) {
-            return <EmptyState icon={<CalendarDays className="w-8 h-8" />} title="この日のシフトはありません" />;
-          }
-          return (
-            <div className="space-y-2">
-              {dayShifts.map((s) => {
-                const tl = timeLabelOf(s);
-                return (
-                  <div key={s.id} className="flex items-start gap-3 p-2.5 rounded-lg bg-gray-50">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                        {statusBadge(s)}
-                        <span className="text-sm font-medium text-gray-900">{s.memberName}</span>
-                      </div>
-                      <p className="text-xs text-gray-600">{s.subject}</p>
-                      <div className="flex gap-2 text-xs text-gray-400 mt-0.5">
-                        {tl && <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{tl}</span>}
-                        {s.place && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{s.place}</span>}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-              {unavailShifts.length > 0 && (
-                <div className="pt-2 border-t border-gray-100">
-                  <p className="text-xs text-gray-400 mb-1">不可申請</p>
-                  {unavailShifts.map((s) => (
-                    <p key={s.id} className="text-xs text-gray-500 py-0.5">{s.memberName}</p>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })()}
-      </Modal>
-
       {/* 復元ログモーダル */}
       <Modal open={logOpen} onClose={() => setLogOpen(false)} title="削除依頼・承認ログ">
         {(() => {
@@ -711,7 +793,12 @@ export function AdminShiftPage() {
                         <div key={s.id} className="p-3 rounded-lg border border-rose-200 bg-rose-50">
                           <div className="flex items-start justify-between gap-2 flex-wrap">
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-gray-900">{s.memberName}</p>
+                              <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                                <span className="text-sm font-medium text-gray-900">{s.memberName}</span>
+                                {markedMembers.has(s.memberName) && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-orange-100 text-orange-600">調整</span>
+                                )}
+                              </div>
                               <p className="text-xs text-gray-600">{formatDateJP(s.date)} · {s.subject}</p>
                               <div className="flex flex-wrap gap-x-2 text-xs text-gray-500 mt-0.5">
                                 {timeLabel && <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{timeLabel}</span>}
@@ -734,28 +821,55 @@ export function AdminShiftPage() {
                 </div>
               )}
 
-              {/* 承認ログ */}
+              {/* 承認ログ: 検索・ソート付き */}
               {hasLogs && (
                 <div>
-                  {hasDeleteReqs && (
-                    <>
-                      <div className="border-t border-gray-200 my-1" />
-                      <p className="text-xs font-semibold text-gray-500 mb-2 flex items-center gap-1">
-                        <History className="w-3.5 h-3.5" />承認ログ（7日以内復元可）
-                      </p>
-                    </>
-                  )}
+                  {hasDeleteReqs && <div className="border-t border-gray-200 my-1" />}
+                  <p className="text-xs font-semibold text-gray-500 mb-2 flex items-center gap-1">
+                    <History className="w-3.5 h-3.5" />承認ログ（7日以内復元可）
+                  </p>
+                  {/* 検索・ソート */}
+                  <div className="space-y-2 mb-3">
+                    <Input
+                      placeholder="名前・場所・日付で検索"
+                      value={logSearch}
+                      onChange={(e) => setLogSearch(e.target.value)}
+                    />
+                    <div className="flex gap-1">
+                      {(['date', 'place', 'name'] as const).map((key) => (
+                        <button
+                          key={key}
+                          onClick={() => setLogSortKey(key)}
+                          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition ${logSortKey === key ? 'bg-slate-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                        >
+                          {key === 'date' ? '日付' : key === 'place' ? '場所' : '名前'}
+                        </button>
+                      ))}
+                      {markedMembers.size > 0 && (
+                        <span className="ml-auto text-[10px] text-orange-600 bg-orange-50 px-2 py-1 rounded-lg">
+                          調整マーク {markedMembers.size}人
+                        </span>
+                      )}
+                    </div>
+                  </div>
                   <div className="space-y-2">
-                    {approvalLogs.map((log) => {
+                    {filteredLogs.map((log) => {
                       const expired = !isPast7Days(log.createdAt);
                       const before = log.beforeState;
+                      const isMarked = before ? markedMembers.has(before.memberName) : false;
                       return (
-                        <div key={log.id} className="p-3 rounded-lg border border-gray-100">
+                        <div
+                          key={log.id}
+                          className={`p-3 rounded-lg border ${isMarked ? 'border-orange-200 bg-orange-50' : 'border-gray-100'}`}
+                        >
                           <div className="flex items-center justify-between mb-1">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <Badge color={log.action === 'approve' ? 'confirmed' : log.action === 'deny' ? 'reviewed' : 'blue'}>
                                 {log.action === 'approve' ? '許可' : log.action === 'deny' ? '否認' : '調整'}
                               </Badge>
+                              {isMarked && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-orange-100 text-orange-600">調整</span>
+                              )}
                               <span className="text-xs text-gray-500">{formatDateTimeJP(log.createdAt)}</span>
                             </div>
                             <Button size="sm" variant="ghost" disabled={expired} onClick={() => doRestore(log)}>
@@ -764,13 +878,20 @@ export function AdminShiftPage() {
                           </div>
                           {before && (
                             <p className="text-xs text-gray-600">
-                              {before.memberName} · {formatDateJP(before.date)} · {before.subject} ({before.status === 'confirmed' ? '確定' : before.status === 'reviewed' ? '確認済' : '予定'})
+                              <span className={isMarked ? 'font-semibold text-orange-700' : 'font-medium text-gray-900'}>
+                                {before.memberName}
+                              </span>
+                              {' · '}{formatDateJP(before.date)} · {before.subject}
+                              {before.place && <span className="ml-1 text-gray-400">({before.place})</span>}
                             </p>
                           )}
                           {expired && <p className="text-[10px] text-gray-400 mt-1">7日経過のため復元不可</p>}
                         </div>
                       );
                     })}
+                    {filteredLogs.length === 0 && (
+                      <p className="text-sm text-gray-400 text-center py-3">該当するログがありません</p>
+                    )}
                   </div>
                 </div>
               )}

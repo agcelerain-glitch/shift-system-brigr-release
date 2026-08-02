@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 2026-08-02（41回目）
+### 変更内容
+- [front/src/pages/AdminShiftPage.tsx] 7日間サマリーの日付タップをモーダルからインラインプレビューに変更。カードの直下に場所→帯→名前のピボットテーブル形式でシフト詳細を展開表示
+- [front/src/pages/AdminShiftPage.tsx] 名前バッジ機能を追加。プレビューの名前をタップすると「調整」マーク（オレンジ）がトグル付与され、複数名を調整対象としてマーキング可能
+- [front/src/pages/AdminShiftPage.tsx] 復元ログモーダルに名前・場所・日付の検索テキストとソートボタン（日付/場所/名前）を追加
+- [front/src/pages/AdminShiftPage.tsx] 復元ログに調整マークを反映。調整対象メンバーのログ行をオレンジ背景で強調表示し、名前に「調整」バッジを付与
+### デプロイ
+- GitHub (origin/main): プッシュ済み（Vercel自動デプロイ）
+
 ## 2026-08-02（40回目）
 ### 変更内容
 - [front/src/pages/RequestPage.tsx] ユーザーの申請フォームから場所プルダウンを完全削除。場所は管理者が承認時に設定する設計に変更
