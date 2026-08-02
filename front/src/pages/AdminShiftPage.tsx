@@ -9,6 +9,7 @@ import { Card, Button, Badge, Input, Select, Modal, EmptyState } from '../compon
 import {
   CheckCircle2, XCircle, Sliders, RotateCcw, Users, MapPin, Clock, User as UserIcon,
   CalendarDays, Calendar, Hash, ChevronDown, ChevronRight, History, Trash2, Plus, Minus,
+  AlertTriangle,
 } from 'lucide-react';
 import { formatDateJP, formatDateTimeJP, isPast7Days, weekdayJP, todayStr } from '../lib/utils';
 import { PLACE_OPTIONS, TEMPLATE_LABELS } from '../lib/config';
@@ -17,6 +18,22 @@ import { approveShift, restoreShift, updateMemberLineId, deleteMember, adminDele
 
 type SortKey = 'date' | 'place' | 'time' | 'name' | 'weekday' | 'headcount';
 type FilterStatus = 'plan' | 'confirmed' | 'reviewed' | 'unavailable' | 'delete_request';
+
+// メンバーごとの最終承認場所をlocalStorageで管理
+const LS_MEMBER_PLACES = 'shiftapp.memberPlaces';
+const getMemberLastPlace = (memberName: string): string => {
+  try {
+    const data = JSON.parse(localStorage.getItem(LS_MEMBER_PLACES) ?? '{}');
+    return data[memberName] ?? '';
+  } catch { return ''; }
+};
+const saveMemberLastPlace = (memberName: string, place: string) => {
+  try {
+    const data = JSON.parse(localStorage.getItem(LS_MEMBER_PLACES) ?? '{}');
+    data[memberName] = place;
+    localStorage.setItem(LS_MEMBER_PLACES, JSON.stringify(data));
+  } catch {}
+};
 
 function timeLabelOf(s: Shift): string {
   if (s.timeType === 'template' && s.template) return TEMPLATE_LABELS[s.template];
@@ -70,7 +87,8 @@ export function AdminShiftPage() {
 
   const openApprove = (s: Shift) => {
     setApprovingShift(s);
-    setApprovePlace(s.place ?? '');
+    // 既にシフトに場所があればそれを優先、なければlastPlaceを使う
+    setApprovePlace(s.place ?? getMemberLastPlace(s.memberName));
   };
 
   const confirmApprove = async () => {
@@ -85,6 +103,7 @@ export function AdminShiftPage() {
         ...(approvePlace ? { adjustFields: { place: approvePlace } } : {}),
       });
       if (res === 'ok') {
+        if (approvePlace) saveMemberLastPlace(s.memberName, approvePlace);
         toast.show(`${s.memberName}さんのシフトを確定しました`, 'success');
         setApprovingShift(null);
       } else if (res === 'conflict') {
@@ -181,8 +200,9 @@ export function AdminShiftPage() {
     setAdjTimeStart(s.timeStart ?? '09:00');
     setAdjTimeEnd(s.timeEnd ?? '17:00');
     setAdjSubject(s.subject);
-    setAdjPlace(s.place ?? '');
-    setAdjAddTime(false); // 常に初期表示なし（+ボタンで追加）
+    // シフトに場所があればそれを優先、なければlastPlaceを使う
+    setAdjPlace(s.place ?? getMemberLastPlace(s.memberName));
+    setAdjAddTime(false);
   };
 
   const doAdjust = async () => {
@@ -202,8 +222,11 @@ export function AdminShiftPage() {
         expectedVersion: adjusting.version,
         adjustFields,
       });
-      if (res === 'ok') { toast.show('調整して確定しました', 'success'); setAdjusting(null); }
-      else if (res === 'conflict') toast.show('競合: 画面を更新してください', 'error');
+      if (res === 'ok') {
+        if (adjPlace.trim()) saveMemberLastPlace(adjusting.memberName, adjPlace.trim());
+        toast.show('調整して確定しました', 'success');
+        setAdjusting(null);
+      } else if (res === 'conflict') toast.show('競合: 画面を更新してください', 'error');
     } catch (e) {
       toast.show(`調整エラー: ${(e as Error).message}`, 'error');
     }
@@ -430,13 +453,24 @@ export function AdminShiftPage() {
               <p className="text-sm font-medium text-gray-900">{approvingShift.memberName}</p>
               <p className="text-sm text-gray-600">{formatDateJP(approvingShift.date)} · {approvingShift.subject}</p>
             </div>
+            {/* 初回承認（lastPlaceなし）の場合は警告表示 */}
+            {!getMemberLastPlace(approvingShift.memberName) && (
+              <div className="flex items-start gap-2 bg-amber-50 text-amber-700 text-xs px-3 py-2 rounded-lg">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <span>初回承認です。場所を設定してください</span>
+              </div>
+            )}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">場所を指定</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                場所
+                {getMemberLastPlace(approvingShift.memberName) && (
+                  <span className="text-xs font-normal text-gray-400 ml-1">（前回: {getMemberLastPlace(approvingShift.memberName)}）</span>
+                )}
+              </label>
               <Select value={approvePlace} onChange={(e) => setApprovePlace(e.target.value)}>
                 <option value="">指定なし</option>
                 {PLACE_OPTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
               </Select>
-              <p className="text-xs text-gray-400 mt-1">省略した場合は場所なしで確定します</p>
             </div>
           </div>
         )}

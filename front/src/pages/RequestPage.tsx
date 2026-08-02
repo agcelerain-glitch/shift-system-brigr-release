@@ -9,7 +9,7 @@ import { Card, Button, Input, Select, Badge, EmptyState } from '../components/ui
 import { FilePlus, Ban, Clock, Wallet, CheckCircle2, AlertTriangle, Trash2, Plus } from 'lucide-react';
 import { formatDateJP, weekdayJP } from '../lib/utils';
 import { createShift, findShiftByMemberDate, cancelShift } from '../lib/db';
-import { PLACE_OPTIONS, SUBJECT_OPTIONS, TEMPLATE_LABELS, TEMPLATE_TIMES } from '../lib/config';
+import { SUBJECT_OPTIONS, TEMPLATE_LABELS, TEMPLATE_TIMES } from '../lib/config';
 import type { TemplateCode } from '../lib/config';
 
 type Mode = 'none' | 'apply' | 'other';
@@ -46,8 +46,6 @@ type ApplyEntry = {
   timeAdjust: boolean; // テンプレート選択時に時間を手動調整するフラグ
   timeStart: string;
   timeEnd: string;
-  place: string;
-  placeCustom: string;
   dupWarning: string | null;
 };
 
@@ -59,8 +57,6 @@ function newEntry(): ApplyEntry {
     timeAdjust: false,
     timeStart: TEMPLATE_TIMES.A.start,
     timeEnd: '26:00',
-    place: '',
-    placeCustom: '',
     dupWarning: null,
   };
 }
@@ -108,6 +104,7 @@ export function RequestPage() {
   };
 
   const checkDupForEntry = async (id: string, date: string) => {
+
     updateApplyEntry(id, { date, dupWarning: null });
     if (!date || !name) return;
     const existing = await findShiftByMemberDate(name, date);
@@ -120,9 +117,6 @@ export function RequestPage() {
     e.subjectMode === 'time'
       ? `時間指定 ${name ?? ''}`
       : `${TEMPLATE_LABELS[e.subjectMode as TemplateCode]} ${name ?? ''}`;
-
-  const resolveEntryPlace = (e: ApplyEntry) =>
-    e.place === '__other__' ? e.placeCustom.trim() : e.place;
 
   // --- none date helpers ---
   const addNoneDate = () => setNoneDates((prev) => [...prev, '']);
@@ -185,9 +179,8 @@ export function RequestPage() {
     try {
       await Promise.all(
         validEntries.map((e) => {
-          const placeVal = resolveEntryPlace(e);
           if (e.subjectMode === 'time') {
-            // 時間指定モード
+            // 時間指定モード（場所は管理者が承認時に設定）
             return createShift({
               memberName: name,
               date: e.date,
@@ -195,7 +188,6 @@ export function RequestPage() {
               timeStart: e.timeStart,
               timeEnd: e.timeEnd,
               subject: entrySubjectLabel(e),
-              ...(placeVal && { place: placeVal }),
             });
           } else if (e.timeAdjust) {
             // テンプレートだが時間を手動調整 → timeTypeをtimeとして保存（件名はテンプレート名のまま）
@@ -206,17 +198,15 @@ export function RequestPage() {
               timeStart: e.timeStart,
               timeEnd: e.timeEnd,
               subject: entrySubjectLabel(e),
-              ...(placeVal && { place: placeVal }),
             });
           } else {
-            // 通常テンプレート
+            // 通常テンプレート（場所は管理者が承認時に設定）
             return createShift({
               memberName: name,
               date: e.date,
               timeType: 'template',
               template: e.subjectMode as TemplateCode,
               subject: entrySubjectLabel(e),
-              ...(placeVal && { place: placeVal }),
             });
           }
         })
@@ -381,30 +371,6 @@ export function RequestPage() {
                     </>
                   )}
 
-                  {/* 場所 */}
-                  <div className={showTimeFields ? '' : 'sm:col-span-2'}>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">場所（任意）</label>
-                    <Select
-                      value={entry.place}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        updateApplyEntry(entry.id, { place: v, ...(v !== '__other__' && { placeCustom: '' }) });
-                      }}
-                    >
-                      <option value="">指定なし</option>
-                      {PLACE_OPTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
-                      <option value="__other__">その他（自由記入）</option>
-                    </Select>
-                    {entry.place === '__other__' && (
-                      <Input
-                        className="mt-2"
-                        placeholder="場所を入力（例: 他店ヘルプ）"
-                        value={entry.placeCustom}
-                        onChange={(e) => updateApplyEntry(entry.id, { placeCustom: e.target.value })}
-                        maxLength={30}
-                      />
-                    )}
-                  </div>
                 </div>
               </Card>
             );

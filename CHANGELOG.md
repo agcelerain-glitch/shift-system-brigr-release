@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 2026-08-02（40回目）
+### 変更内容
+- [front/src/pages/RequestPage.tsx] ユーザーの申請フォームから場所プルダウンを完全削除。場所は管理者が承認時に設定する設計に変更
+- [front/src/pages/AdminShiftPage.tsx] メンバーごとの最終承認場所をlocalStorage（shiftapp.memberPlaces）で管理するヘルパー追加
+- [front/src/pages/AdminShiftPage.tsx] 承認モーダル: 初回承認時に「場所を設定してください」警告を表示。2回目以降はlastPlaceを自動入力し「前回: 〇〇」をラベルに表示
+- [front/src/pages/AdminShiftPage.tsx] 調整モーダル: シフトに場所がなければlastPlaceを自動入力。承認・調整完了後に場所を記憶（次回自動入力用）
+### デプロイ
+- GitHub (origin/main): プッシュ済み（Vercel自動デプロイ）
+
 ## 2026-08-02（39回目）
 ### 変更内容
 - [front/src/pages/NameSetupPage.tsx] savedNameがある場合（非devモード）はボタン操作なしで自動遷移に変更。マウント時にupsertMember→setName→navigateを実行し、遷移中はスピナーを表示
