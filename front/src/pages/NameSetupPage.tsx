@@ -1,8 +1,9 @@
 // 名前入力画面: ログイン直後に名前を入力、members コレクションへ保存し以降の紐づけに使う
-// 前回ログイン名がキャッシュされている場合はワンタップ確認UIを表示
+// savedName がある場合はワンタップ確認UI。「別の名前を使う」は開発者モード時のみ表示。
+// 開発者モード: URLに ?dev=1 を付けるか、アイコンを5回連続タップで有効化。
 
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useCallback } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { User, ArrowRight } from 'lucide-react';
 import { useAuth, LS_SAVED_NAME_KEY } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -13,11 +14,29 @@ export function NameSetupPage() {
   const { setName, name, role } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const savedName = localStorage.getItem(LS_SAVED_NAME_KEY);
+
+  // 開発者モード: ?dev=1 または アイコン5回タップで有効化
+  const [devMode, setDevMode] = useState(searchParams.get('dev') === '1');
+  const [iconTapCount, setIconTapCount] = useState(0);
+
   const [useDifferent, setUseDifferent] = useState(false);
   const [value, setValue] = useState(name ?? '');
   const [saving, setSaving] = useState(false);
+
+  const handleIconTap = useCallback(() => {
+    if (devMode) return;
+    const next = iconTapCount + 1;
+    if (next >= 5) {
+      setDevMode(true);
+      setIconTapCount(0);
+      toast.show('開発者モード有効', 'success');
+    } else {
+      setIconTapCount(next);
+    }
+  }, [devMode, iconTapCount, toast]);
 
   const handleConfirm = async (nameToSet: string) => {
     const trimmed = nameToSet.trim();
@@ -44,15 +63,24 @@ export function NameSetupPage() {
     await handleConfirm(value);
   };
 
-  // 前回の名前がキャッシュされており、かつ「別の名前を使う」を選択していない場合
+  const iconButton = (
+    <button
+      type="button"
+      aria-label="アイコン"
+      onClick={handleIconTap}
+      className="w-14 h-14 rounded-2xl bg-brand-100 flex items-center justify-center text-brand-600 mb-3 focus:outline-none"
+    >
+      <User className="w-7 h-7" />
+    </button>
+  );
+
+  // savedName あり、かつ「別の名前を使う」を選択していない場合 → 名前確認UI
   if (savedName && !useDifferent) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-brand-50 via-white to-brand-50 p-4">
         <div className="w-full max-w-sm">
           <div className="flex flex-col items-center mb-8">
-            <div className="w-14 h-14 rounded-2xl bg-brand-100 flex items-center justify-center text-brand-600 mb-3">
-              <User className="w-7 h-7" />
-            </div>
+            {iconButton}
             <h1 className="text-xl font-bold text-gray-900">名前を確認</h1>
             <p className="text-sm text-gray-500 mt-1">前回の名前でそのまま続けられます</p>
           </div>
@@ -71,27 +99,27 @@ export function NameSetupPage() {
               {saving ? '確認中…' : `${savedName} でログイン`}
               {!saving && <ArrowRight className="w-4 h-4" />}
             </Button>
-            <button
-              type="button"
-              onClick={() => { setUseDifferent(true); setValue(''); }}
-              className="w-full text-sm text-gray-400 hover:text-gray-600 py-2 transition-colors"
-            >
-              別の名前を使う
-            </button>
+            {devMode && (
+              <button
+                type="button"
+                onClick={() => { setUseDifferent(true); setValue(''); }}
+                className="w-full text-sm text-gray-400 hover:text-gray-600 py-2 transition-colors"
+              >
+                別の名前を使う（開発者）
+              </button>
+            )}
           </div>
         </div>
       </div>
     );
   }
 
-  // 通常の名前入力フォーム（初回 or 別の名前を使う場合）
+  // 通常の名前入力フォーム（初回 or 開発者による名前切り替え）
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-brand-50 via-white to-brand-50 p-4">
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-brand-100 flex items-center justify-center text-brand-600 mb-3">
-            <User className="w-7 h-7" />
-          </div>
+          {iconButton}
           <h1 className="text-xl font-bold text-gray-900">お名前を教えてください</h1>
           <p className="text-sm text-gray-500 mt-1">シフト・掲示板はこの名前で紐づきます</p>
         </div>
@@ -111,7 +139,7 @@ export function NameSetupPage() {
             {saving ? '保存中…' : '次へ'}
             {!saving && <ArrowRight className="w-4 h-4" />}
           </Button>
-          {savedName && (
+          {devMode && savedName && (
             <button
               type="button"
               onClick={() => setUseDifferent(false)}
