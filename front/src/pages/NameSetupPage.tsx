@@ -1,8 +1,8 @@
-// 名前入力画面: ログイン直後に名前を入力、members コレクションへ保存し以降の紐づけに使う
-// savedName がある場合はワンタップ確認UI。「別の名前を使う」は開発者モード時のみ表示。
-// 開発者モード: URLに ?dev=1 を付けるか、アイコンを5回連続タップで有効化。
+// 名前入力画面: ログイン直後に名前を設定する
+// savedName（localStorage）があれば自動でFirestore更新→遷移（ボタン操作不要）
+// 開発者モード: ?dev=1 またはアイコン5回連続タップで有効化 → 別の名前を使う選択肢が出る
 
-import { useState, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { User, ArrowRight } from 'lucide-react';
 import { useAuth, LS_SAVED_NAME_KEY } from '../contexts/AuthContext';
@@ -18,13 +18,31 @@ export function NameSetupPage() {
 
   const savedName = localStorage.getItem(LS_SAVED_NAME_KEY);
 
-  // 開発者モード: ?dev=1 または アイコン5回タップで有効化
+  // 開発者モード: ?dev=1 またはアイコン5回タップで有効化
   const [devMode, setDevMode] = useState(searchParams.get('dev') === '1');
   const [iconTapCount, setIconTapCount] = useState(0);
-
   const [useDifferent, setUseDifferent] = useState(false);
   const [value, setValue] = useState(name ?? '');
   const [saving, setSaving] = useState(false);
+
+  // savedNameがある場合はボタン操作なしで自動遷移（devModeは除外）
+  useEffect(() => {
+    if (!savedName || devMode) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        await upsertMember(savedName);
+      } catch {
+        // ネットワーク不安定時も遷移を優先（次回ログイン時に更新される）
+      }
+      if (!cancelled) {
+        setName(savedName);
+        localStorage.setItem(LS_SAVED_NAME_KEY, savedName);
+        navigate(role === 'admin' ? '/admin-shift' : '/');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleIconTap = useCallback(() => {
     if (devMode) return;
@@ -40,10 +58,7 @@ export function NameSetupPage() {
 
   const handleConfirm = async (nameToSet: string) => {
     const trimmed = nameToSet.trim();
-    if (!trimmed) {
-      toast.show('名前を入力してください', 'error');
-      return;
-    }
+    if (!trimmed) { toast.show('名前を入力してください', 'error'); return; }
     setSaving(true);
     try {
       await upsertMember(trimmed);
@@ -74,8 +89,20 @@ export function NameSetupPage() {
     </button>
   );
 
-  // savedName あり、かつ「別の名前を使う」を選択していない場合 → 名前確認UI
-  if (savedName && !useDifferent) {
+  // savedNameあり・非devMode → 自動遷移中のローディング表示
+  if (savedName && !devMode) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-brand-50 via-white to-brand-50">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-brand-400 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-sm text-gray-500">ログイン中…</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 開発者モード: savedNameあり & 別の名前を使う選択前 → 名前確認UI
+  if (devMode && savedName && !useDifferent) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-brand-50 via-white to-brand-50 p-4">
         <div className="w-full max-w-sm">
@@ -84,7 +111,6 @@ export function NameSetupPage() {
             <h1 className="text-xl font-bold text-gray-900">名前を確認</h1>
             <p className="text-sm text-gray-500 mt-1">前回の名前でそのまま続けられます</p>
           </div>
-
           <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6 space-y-4">
             <div className="bg-brand-50 rounded-xl p-4 text-center">
               <p className="text-xs text-gray-400 mb-1">前回のログイン名</p>
@@ -99,15 +125,13 @@ export function NameSetupPage() {
               {saving ? '確認中…' : `${savedName} でログイン`}
               {!saving && <ArrowRight className="w-4 h-4" />}
             </Button>
-            {devMode && (
-              <button
-                type="button"
-                onClick={() => { setUseDifferent(true); setValue(''); }}
-                className="w-full text-sm text-gray-400 hover:text-gray-600 py-2 transition-colors"
-              >
-                別の名前を使う（開発者）
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => { setUseDifferent(true); setValue(''); }}
+              className="w-full text-sm text-gray-400 hover:text-gray-600 py-2 transition-colors"
+            >
+              別の名前を使う（開発者）
+            </button>
           </div>
         </div>
       </div>
@@ -123,7 +147,6 @@ export function NameSetupPage() {
           <h1 className="text-xl font-bold text-gray-900">お名前を教えてください</h1>
           <p className="text-sm text-gray-500 mt-1">シフト・掲示板はこの名前で紐づきます</p>
         </div>
-
         <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-card border border-gray-100 p-6 space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">名前</label>

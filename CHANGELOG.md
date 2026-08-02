@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 2026-08-02（39回目）
+### 変更内容
+- [front/src/pages/NameSetupPage.tsx] savedNameがある場合（非devモード）はボタン操作なしで自動遷移に変更。マウント時にupsertMember→setName→navigateを実行し、遷移中はスピナーを表示
+- [front/src/pages/RequestPage.tsx] テンプレート（A〜D帯）選択時に「時間を調整する」トグルボタンを追加。有効時は開始・終了時刻セレクトが表示され、保存はtimeType:'time'（件名はテンプレート名のまま）
+- [front/src/pages/RequestPage.tsx] 終了時刻の上限を26:00から32:45（翌8:45）に拡張。24:00以上の翌日時刻は開始時刻に関わらず有効と判定するバリデーションに修正
+- [front/src/pages/RequestPage.tsx] テンプレート変更時に開始時刻をそのテンプレートのデフォルト値にリセット
+### デプロイ
+- GitHub (origin/main): プッシュ済み（Vercel自動デプロイ）
+
 ## 2026-08-02（38回目）
 ### 変更内容
 - [front/src/lib/utils.ts] `toISOString()`のUTC変換による日付ズレを修正。ローカル日付文字列変換ヘルパー`toDateStr`を追加し、`todayStr`・`addDays`・`getMonthGrid`を修正

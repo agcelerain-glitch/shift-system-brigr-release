@@ -9,7 +9,7 @@ import { Card, Button, Input, Select, Badge, EmptyState } from '../components/ui
 import { FilePlus, Ban, Clock, Wallet, CheckCircle2, AlertTriangle, Trash2, Plus } from 'lucide-react';
 import { formatDateJP, weekdayJP } from '../lib/utils';
 import { createShift, findShiftByMemberDate, cancelShift } from '../lib/db';
-import { PLACE_OPTIONS, SUBJECT_OPTIONS, TEMPLATE_LABELS } from '../lib/config';
+import { PLACE_OPTIONS, SUBJECT_OPTIONS, TEMPLATE_LABELS, TEMPLATE_TIMES } from '../lib/config';
 import type { TemplateCode } from '../lib/config';
 
 type Mode = 'none' | 'apply' | 'other';
@@ -23,19 +23,27 @@ for (let h = 9; h < 24; h++) {
   }
 }
 
-// 終了時刻: 09:00〜26:00（翌2:00まで、25:00=翌1:00、26:00=翌2:00）
+// 終了時刻: 09:00〜32:45（翌8:45まで。24:00=翌0:00、32:45=翌8:45）
+// 翌日の時刻でも日付は当日のまま保存（堅牢性確保）
 const END_OPTIONS: string[] = [...START_OPTIONS];
-for (let h = 24; h <= 26; h++) {
+for (let h = 24; h <= 32; h++) {
   for (const m of [0, 15, 30, 45]) {
-    if (h === 26 && m > 0) break;
+    if (h === 32 && m > 45) break;
     END_OPTIONS.push(`${h}:${String(m).padStart(2, '0')}`);
   }
 }
+
+// 終了時刻のバリデーション: 24:00以上（翌日時刻）なら開始に関わらず有効
+const isTimeInvalid = (start: string, end: string): boolean => {
+  if (parseInt(end.split(':')[0], 10) >= 24) return false;
+  return start >= end;
+};
 
 type ApplyEntry = {
   id: string;
   date: string;
   subjectMode: SubjectMode;
+  timeAdjust: boolean; // テンプレート選択時に時間を手動調整するフラグ
   timeStart: string;
   timeEnd: string;
   place: string;
@@ -48,7 +56,8 @@ function newEntry(): ApplyEntry {
     id: Math.random().toString(36).slice(2),
     date: '',
     subjectMode: 'A',
-    timeStart: '20:00',
+    timeAdjust: false,
+    timeStart: TEMPLATE_TIMES.A.start,
     timeEnd: '26:00',
     place: '',
     placeCustom: '',
@@ -70,13 +79,8 @@ export function RequestPage() {
   const [submitting, setSubmitting] = useState(false);
   const [canceling, setCanceling] = useState<string | null>(null);
 
-  // 申請モード: 複数エントリー
   const [applyEntries, setApplyEntries] = useState<ApplyEntry[]>([newEntry()]);
-
-  // 不可モード: 複数日
   const [noneDates, setNoneDates] = useState<string[]>(['']);
-
-  // その他モード
   const [otherDate, setOtherDate] = useState('');
 
   const myRecent = [...shifts.filter((s) => s.memberName === name)]
@@ -87,6 +91,21 @@ export function RequestPage() {
   const removeApplyEntry = (id: string) => setApplyEntries((prev) => prev.filter((e) => e.id !== id));
   const updateApplyEntry = (id: string, patch: Partial<ApplyEntry>) =>
     setApplyEntries((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)));
+
+  // テンプレート変更時: 時間調整をリセットし、デフォルト開始時刻をそのテンプレートに合わせる
+  const handleSubjectModeChange = (id: string, mode: SubjectMode) => {
+    if (mode === 'time') {
+      updateApplyEntry(id, { subjectMode: mode, timeAdjust: false });
+    } else {
+      const tCode = mode as TemplateCode;
+      updateApplyEntry(id, {
+        subjectMode: mode,
+        timeAdjust: false,
+        timeStart: TEMPLATE_TIMES[tCode].start,
+        timeEnd: '26:00',
+      });
+    }
+  };
 
   const checkDupForEntry = async (id: string, date: string) => {
     updateApplyEntry(id, { date, dupWarning: null });
@@ -121,7 +140,6 @@ export function RequestPage() {
   const handleSubmit = async () => {
     if (!name) return;
 
-    // --- 不可モード ---
     if (mode === 'none') {
       const dates = validNoneDates();
       if (dates.length === 0) { toast.show('日付を1つ以上選択してください', 'error'); return; }
@@ -139,7 +157,6 @@ export function RequestPage() {
       return;
     }
 
-    // --- その他モード ---
     if (mode === 'other') {
       if (!otherDate) { toast.show('日付を選択してください', 'error'); return; }
       setSubmitting(true);
@@ -152,15 +169,15 @@ export function RequestPage() {
       return;
     }
 
-    // --- 申請モード ---
     const validEntries = applyEntries.filter((e) => e.date !== '');
     if (validEntries.length === 0) { toast.show('日付を1つ以上入力してください', 'error'); return; }
     if (validEntries.some((e) => e.dupWarning)) {
       toast.show('重複申請があります。確認してください', 'error'); return;
     }
+    // 時間指定 or テンプレート+時間調整のバリデーション（翌日時刻は常に有効）
     const hasInvalidTime = validEntries.some((e) => {
-      const opt = SUBJECT_OPTIONS.find((o) => o.value === e.subjectMode);
-      return opt?.hasTime && e.timeStart >= e.timeEnd;
+      const needsTime = e.subjectMode === 'time' || e.timeAdjust;
+      return needsTime && isTimeInvalid(e.timeStart, e.timeEnd);
     });
     if (hasInvalidTime) { toast.show('終了時刻は開始時刻より後にしてください', 'error'); return; }
 
@@ -170,6 +187,18 @@ export function RequestPage() {
         validEntries.map((e) => {
           const placeVal = resolveEntryPlace(e);
           if (e.subjectMode === 'time') {
+            // 時間指定モード
+            return createShift({
+              memberName: name,
+              date: e.date,
+              timeType: 'time',
+              timeStart: e.timeStart,
+              timeEnd: e.timeEnd,
+              subject: entrySubjectLabel(e),
+              ...(placeVal && { place: placeVal }),
+            });
+          } else if (e.timeAdjust) {
+            // テンプレートだが時間を手動調整 → timeTypeをtimeとして保存（件名はテンプレート名のまま）
             return createShift({
               memberName: name,
               date: e.date,
@@ -180,6 +209,7 @@ export function RequestPage() {
               ...(placeVal && { place: placeVal }),
             });
           } else {
+            // 通常テンプレート
             return createShift({
               memberName: name,
               date: e.date,
@@ -247,7 +277,9 @@ export function RequestPage() {
       {mode === 'apply' && (
         <div className="space-y-3 mb-4">
           {applyEntries.map((entry, idx) => {
-            const currentOption = SUBJECT_OPTIONS.find((o) => o.value === entry.subjectMode)!;
+            const isTemplate = entry.subjectMode !== 'time';
+            const showTimeFields = !isTemplate || entry.timeAdjust; // 時間指定 or テンプレート+調整あり
+
             return (
               <Card key={entry.id} className="p-4">
                 <div className="flex items-center justify-between mb-3">
@@ -290,7 +322,7 @@ export function RequestPage() {
                     <label className="block text-sm font-medium text-gray-700 mb-1.5">件名（テンプレート）</label>
                     <Select
                       value={entry.subjectMode}
-                      onChange={(e) => updateApplyEntry(entry.id, { subjectMode: e.target.value as SubjectMode })}
+                      onChange={(e) => handleSubjectModeChange(entry.id, e.target.value as SubjectMode)}
                     >
                       {SUBJECT_OPTIONS.map((o) => (
                         <option key={o.value} value={o.value}>{o.label}</option>
@@ -301,8 +333,26 @@ export function RequestPage() {
                     </p>
                   </div>
 
-                  {/* 時間指定の場合のみ表示 */}
-                  {currentOption.hasTime && (
+                  {/* テンプレート選択時の時間調整トグル */}
+                  {isTemplate && (
+                    <div className="sm:col-span-2">
+                      <button
+                        type="button"
+                        onClick={() => updateApplyEntry(entry.id, { timeAdjust: !entry.timeAdjust })}
+                        className={`flex items-center gap-2 text-sm font-medium px-3 py-1.5 rounded-lg border transition-colors ${
+                          entry.timeAdjust
+                            ? 'border-brand-300 bg-brand-50 text-brand-700'
+                            : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                        }`}
+                      >
+                        <Clock className="w-4 h-4" />
+                        {entry.timeAdjust ? '時間調整あり（タップで解除）' : '時間を調整する（遅刻・早退など）'}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* 時間フィールド: 時間指定モード or テンプレート+時間調整 */}
+                  {showTimeFields && (
                     <>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1.5">開始時刻</label>
@@ -316,7 +366,7 @@ export function RequestPage() {
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1.5">
                           終了時刻
-                          <span className="text-xs font-normal text-gray-400 ml-1">（25:00=翌1:00、26:00=翌2:00）</span>
+                          <span className="text-xs font-normal text-gray-400 ml-1">（24:00=翌0:00、32:45=翌8:45）</span>
                         </label>
                         <Select
                           value={entry.timeEnd}
@@ -324,7 +374,7 @@ export function RequestPage() {
                         >
                           {END_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
                         </Select>
-                        {entry.timeStart >= entry.timeEnd && (
+                        {isTimeInvalid(entry.timeStart, entry.timeEnd) && (
                           <p className="text-xs text-amber-600 mt-1">終了は開始より後にしてください</p>
                         )}
                       </div>
@@ -332,7 +382,7 @@ export function RequestPage() {
                   )}
 
                   {/* 場所 */}
-                  <div className={currentOption.hasTime ? '' : 'sm:col-span-2'}>
+                  <div className={showTimeFields ? '' : 'sm:col-span-2'}>
                     <label className="block text-sm font-medium text-gray-700 mb-1.5">場所（任意）</label>
                     <Select
                       value={entry.place}
@@ -395,7 +445,6 @@ export function RequestPage() {
                 <Plus className="w-3.5 h-3.5" />日付を追加する
               </button>
             </div>
-
             {noneDates.map((d, idx) => (
               <div key={idx} className="flex items-start gap-2">
                 <div className="flex-1">
@@ -416,7 +465,6 @@ export function RequestPage() {
                 )}
               </div>
             ))}
-
             {validNoneDates().length > 0 && (
               <div className="mt-1 flex items-start gap-2 bg-red-50 text-red-700 text-sm px-3 py-2 rounded-lg">
                 <Ban className="w-4 h-4 shrink-0 mt-0.5" />
@@ -429,7 +477,6 @@ export function RequestPage() {
               </div>
             )}
           </div>
-
           <div className="mt-5 flex justify-end">
             <Button size="lg" onClick={handleSubmit} disabled={submitting}>
               {submitting
