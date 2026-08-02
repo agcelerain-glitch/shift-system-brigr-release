@@ -11,7 +11,7 @@ import {
   CalendarDays, Calendar, Hash, ChevronDown, ChevronRight, History, Trash2, Plus, Minus,
   AlertTriangle,
 } from 'lucide-react';
-import { formatDateJP, formatDateTimeJP, isPast7Days, weekdayJP, todayStr } from '../lib/utils';
+import { formatDateJP, formatDateTimeJP, isPast7Days, weekdayJP, todayStr, addDays } from '../lib/utils';
 import { PLACE_OPTIONS, TEMPLATE_LABELS } from '../lib/config';
 import type { Shift, ApprovalLog } from '../lib/types';
 import { approveShift, restoreShift, updateMemberLineId, deleteMember, adminDeleteShift } from '../lib/db';
@@ -166,9 +166,8 @@ export function AdminShiftPage() {
   const today = todayStr();
   const weekSummary = useMemo(() => {
     return Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(today + 'T00:00:00');
-      d.setDate(d.getDate() + i);
-      const date = d.toISOString().slice(0, 10);
+      const date = addDays(today, i);
+      const d = new Date(date + 'T00:00:00');
       const dayShifts = shifts.filter((s) => s.date === date);
       return {
         date,
