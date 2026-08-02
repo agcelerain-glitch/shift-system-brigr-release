@@ -279,6 +279,8 @@ export async function restoreShift(logId: string): Promise<'ok' | 'expired' | 'c
       if (!log.beforeState) throw new Error('no beforeState');
       const shiftRef = doc(db!, 'shifts', log.shiftId);
       tx.set(shiftRef, { ...log.beforeState, updatedAt: serverTimestamp(), version: log.beforeState.version + 1 }, { merge: true });
+      // 復元完了後はログ自体を削除（使用済みログの蓄積・バッジ誤表示を防ぐ）
+      tx.delete(logRef);
     });
     return 'ok';
   } catch (e) {

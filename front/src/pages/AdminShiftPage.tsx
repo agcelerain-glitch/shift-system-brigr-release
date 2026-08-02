@@ -188,7 +188,7 @@ export function AdminShiftPage() {
   const pivotData = useMemo(() => {
     if (!summarySelectedDate) return [];
     const dayShifts = shifts
-      .filter((s) => s.date === summarySelectedDate && s.timeType !== 'none')
+      .filter((s) => s.date === summarySelectedDate && s.timeType !== 'none' && s.status === 'confirmed')
       .sort((a, b) => {
         const pa = a.place ?? '￿';
         const pb = b.place ?? '￿';

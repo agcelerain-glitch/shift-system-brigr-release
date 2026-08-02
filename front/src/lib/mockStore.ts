@@ -162,7 +162,9 @@ export const mockStore = {
     } else {
       state.shifts.push({ ...log.beforeState, version: log.beforeState.version + 1, updatedAt: Date.now() });
     }
+    state.approvalLogs = state.approvalLogs.filter((l) => l.id !== logId);
     notify('shifts');
+    notify('approvalLogs');
     return 'ok';
   },
 
