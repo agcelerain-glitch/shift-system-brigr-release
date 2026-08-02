@@ -1,10 +1,14 @@
-// 月表示カレンダー: 全ユーザーのシフトを重ねて表示、予定/確定/当日/確認済/不可を配色で区別
+// 2週間カレンダー: 今週+次週のシフトを表示、曜日グリッド日曜始まり
+// ナビゲーション: < 今日 > で1週間単位移動、今日ボタンで今日が属する週に戻る
+// DayShiftList: 確定>場所>帯>名前でソート表示
 
 import { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Shift } from '../lib/types';
 import { TEMPLATE_TIMES } from '../lib/types';
-import { getMonthGrid, getMonthLabel, todayStr, formatDateJP } from '../lib/utils';
+import {
+  getTwoWeekGrid, getWeekStart, getWeekLabel, addDays, todayStr, formatDateJP,
+} from '../lib/utils';
 import { Badge } from './ui';
 
 function getTimeLabel(s: Shift): string {
@@ -16,6 +20,14 @@ function getTimeLabel(s: Shift): string {
   return '';
 }
 
+function timeSortVal(s: Shift): number {
+  if (s.timeType === 'time' && s.timeStart) return parseInt(s.timeStart.replace(':', ''), 10);
+  if (s.timeType === 'template' && s.template)
+    return ({ A: 2000, B: 2030, C: 2130, D: 2200 } as Record<string, number>)[s.template] ?? 9000;
+  return 9999;
+}
+
+const STATUS_ORDER: Record<string, number> = { confirmed: 0, delete_requested: 1, reviewed: 2, plan: 3 };
 const WEEK = ['日', '月', '火', '水', '木', '金', '土'];
 
 export interface MemberColor {
@@ -28,7 +40,6 @@ export interface MemberColor {
 }
 
 function getShiftStyle(s: Shift, mc: MemberColor | undefined): { style?: React.CSSProperties; cls: string } {
-  // 不可（シフトなし）: グレー表示、取り消し線なし
   if (s.timeType === 'none') {
     return { cls: 'text-[10px] leading-tight px-1 py-0.5 rounded truncate bg-gray-100 text-gray-400' };
   }
@@ -60,12 +71,14 @@ export function MonthCalendar({
   memberColors?: Record<string, MemberColor>;
 }) {
   const today = todayStr();
-  const [cursor, setCursor] = useState(() => {
-    const d = new Date();
-    return { y: d.getFullYear(), m: d.getMonth() };
-  });
+  // 今日が属する週の日曜日を初期値にする
+  const [weekStart, setWeekStart] = useState(() => getWeekStart(today));
 
-  const grid = useMemo(() => getMonthGrid(cursor.y, cursor.m), [cursor]);
+  const week2Start = useMemo(() => addDays(weekStart, 7), [weekStart]);
+  const grid = useMemo(() => getTwoWeekGrid(weekStart), [weekStart]);
+  const week1 = grid.slice(0, 7);
+  const week2 = grid.slice(7, 14);
+
   const byDate = useMemo(() => {
     const map: Record<string, Shift[]> = {};
     shifts.forEach((s) => { (map[s.date] ??= []).push(s); });
@@ -76,89 +89,102 @@ export function MonthCalendar({
   const hasPlan      = useMemo(() => shifts.some((s) => s.status === 'plan' && s.timeType !== 'none'), [shifts]);
   const hasReviewed  = useMemo(() => shifts.some((s) => s.status === 'reviewed'), [shifts]);
 
-  const move = (delta: number) => {
-    setCursor((c) => {
-      const d = new Date(c.y, c.m + delta, 1);
-      return { y: d.getFullYear(), m: d.getMonth() };
-    });
+  const moveWeek = (delta: number) => setWeekStart((ws) => addDays(ws, delta * 7));
+  const goToday  = () => setWeekStart(getWeekStart(todayStr()));
+
+  const renderCell = (date: string, idx: number) => {
+    const d = new Date(date + 'T00:00:00');
+    const isToday = date === today;
+    const dayShifts = byDate[date] ?? [];
+    const dow = d.getDay();
+    // 月初のみ「8/1」形式、それ以外は日のみ
+    const dayLabel = d.getDate() === 1 ? `${d.getMonth() + 1}/${d.getDate()}` : String(d.getDate());
+
+    return (
+      <button
+        key={date}
+        onClick={() => onSelectDate?.(date)}
+        className={[
+          'min-h-[80px] border-b border-r border-gray-50 p-1.5 text-left align-top transition hover:bg-brand-50/50 bg-white',
+          idx === 6 ? 'border-r-0' : '',
+          isToday ? 'ring-2 ring-today-ring ring-inset' : '',
+        ].filter(Boolean).join(' ')}
+      >
+        <div className={`text-xs font-medium mb-1 ${
+          dow === 0 ? 'text-red-500' : dow === 6 ? 'text-blue-500' : 'text-gray-700'
+        }`}>
+          {isToday
+            ? <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-red-500 text-white text-[10px]">{d.getDate()}</span>
+            : dayLabel
+          }
+        </div>
+        <div className="space-y-0.5">
+          {dayShifts.slice(0, 3).map((s) => {
+            const isUnavailable = s.timeType === 'none';
+            const { style, cls } = getShiftStyle(s, memberColors?.[s.memberName]);
+            const label = isUnavailable ? `${s.memberName.split(' ')[0]} 不可` : s.subject;
+            return (
+              <div key={s.id} className={cls} style={style} title={`${s.memberName} ${s.subject}`}>
+                {label}
+              </div>
+            );
+          })}
+          {dayShifts.length > 3 && (
+            <div className="text-[10px] text-gray-400 px-1">他{dayShifts.length - 3}件</div>
+          )}
+        </div>
+      </button>
+    );
   };
 
   return (
     <div className="bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden">
+      {/* ヘッダー: 「8/2の週 ・ 8/9の週」+ ナビ */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-        <h2 className="font-semibold text-gray-900">{getMonthLabel(cursor.y, cursor.m)}</h2>
+        <h2 className="font-semibold text-gray-900 text-sm">
+          {getWeekLabel(weekStart)} ・ {getWeekLabel(week2Start)}
+        </h2>
         <div className="flex items-center gap-1">
-          <button onClick={() => move(-1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600">
+          <button onClick={() => moveWeek(-1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600">
             <ChevronLeft className="w-5 h-5" />
           </button>
           <button
-            onClick={() => setCursor({ y: new Date().getFullYear(), m: new Date().getMonth() })}
+            onClick={goToday}
             className="px-2 py-1 text-xs text-brand-600 hover:bg-brand-50 rounded-lg font-medium"
           >
             今日
           </button>
-          <button onClick={() => move(1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600">
+          <button onClick={() => moveWeek(1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600">
             <ChevronRight className="w-5 h-5" />
           </button>
         </div>
       </div>
 
+      {/* 曜日ヘッダー */}
       <div className="grid grid-cols-7 border-b border-gray-100 bg-gray-50">
         {WEEK.map((w, i) => (
-          <div key={w} className={`text-center py-2 text-xs font-medium ${i === 0 ? 'text-red-500' : i === 6 ? 'text-blue-500' : 'text-gray-500'}`}>
+          <div
+            key={w}
+            className={`text-center py-2 text-xs font-medium ${
+              i === 0 ? 'text-red-500' : i === 6 ? 'text-blue-500' : 'text-gray-500'
+            }`}
+          >
             {w}
           </div>
         ))}
       </div>
 
+      {/* 1週目 */}
       <div className="grid grid-cols-7">
-        {grid.map((date, idx) => {
-          const d = new Date(date + 'T00:00:00');
-          const inMonth = d.getMonth() === cursor.m;
-          const isToday = date === today;
-          const dayShifts = byDate[date] ?? [];
-
-          return (
-            <button
-              key={date}
-              onClick={() => onSelectDate?.(date)}
-              className={`min-h-[88px] border-b border-r border-gray-50 p-1.5 text-left align-top transition hover:bg-brand-50/50 ${
-                idx % 7 === 6 ? 'border-r-0' : ''
-              } ${inMonth ? 'bg-white' : 'bg-gray-50/50'} ${isToday ? 'ring-2 ring-today-ring ring-inset' : ''}`}
-            >
-              <div className={`text-xs font-medium mb-1 ${inMonth ? (d.getDay() === 0 ? 'text-red-500' : d.getDay() === 6 ? 'text-blue-500' : 'text-gray-700') : 'text-gray-300'}`}>
-                {isToday && <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-red-500 text-white text-[10px] mr-0.5">{d.getDate()}</span>}
-                {!isToday && d.getDate()}
-              </div>
-              <div className="space-y-0.5">
-                {dayShifts.slice(0, 3).map((s) => {
-                  const isUnavailable = s.timeType === 'none';
-                  const { style, cls } = getShiftStyle(s, memberColors?.[s.memberName]);
-                  const label = isUnavailable
-                    ? `${s.memberName.split(' ')[0]} 不可`
-                    : s.subject;
-                  return (
-                    <div
-                      key={s.id}
-                      className={cls}
-                      style={style}
-                      title={`${s.memberName} ${s.subject}`}
-                    >
-                      {label}
-                    </div>
-                  );
-                })}
-                {dayShifts.length > 3 && <div className="text-[10px] text-gray-400 px-1">他{dayShifts.length - 3}件</div>}
-              </div>
-              {dayShifts.length === 0 && inMonth && !isToday && (
-                <div className="text-[10px] text-gray-200 mt-1">—</div>
-              )}
-            </button>
-          );
-        })}
+        {week1.map((date, idx) => renderCell(date, idx))}
       </div>
 
-      {/* 凡例: 表示されているステータスのみ動的に表示 */}
+      {/* 2週目（週間区切り線あり） */}
+      <div className="grid grid-cols-7 border-t border-gray-200">
+        {week2.map((date, idx) => renderCell(date, idx))}
+      </div>
+
+      {/* 凡例 */}
       <div className="flex items-center gap-3 px-4 py-3 border-t border-gray-100 bg-gray-50 text-xs flex-wrap">
         <span className="flex items-center gap-1.5"><Badge color="confirmed">確定</Badge></span>
         {hasPlan && <span className="flex items-center gap-1.5"><Badge color="plan">予定</Badge></span>}
@@ -177,26 +203,44 @@ export function MonthCalendar({
   );
 }
 
-// 1日のシフト詳細ドロワー表示用
+// 日付タップ時の詳細リスト: 確定>削除依頼>確認済>予定、次に場所>帯>名前でソート
 export function DayShiftList({ date, shifts }: { date: string; shifts: Shift[] }) {
+  const sorted = useMemo(
+    () =>
+      [...shifts].sort((a, b) => {
+        const sa = STATUS_ORDER[a.status] ?? 3;
+        const sb = STATUS_ORDER[b.status] ?? 3;
+        if (sa !== sb) return sa - sb;
+        const pc = (a.place ?? '').localeCompare(b.place ?? '', 'ja');
+        if (pc !== 0) return pc;
+        const td = timeSortVal(a) - timeSortVal(b);
+        if (td !== 0) return td;
+        return a.memberName.localeCompare(b.memberName, 'ja');
+      }),
+    [shifts],
+  );
+
   return (
     <div className="space-y-2">
       <p className="text-sm font-medium text-gray-700">{formatDateJP(date)} のシフト</p>
-      {shifts.length === 0 ? (
+      {sorted.length === 0 ? (
         <p className="text-sm text-gray-400">この日のシフトはありません</p>
       ) : (
-        shifts.map((s) => {
+        sorted.map((s) => {
           const isUnavailable = s.timeType === 'none';
           const timeLabel = getTimeLabel(s);
           return (
             <div key={s.id} className="flex items-start gap-2 p-3 rounded-lg bg-gray-50">
               <Badge color={
-                isUnavailable ? 'gray' :
-                s.status === 'delete_requested' ? 'red' :
-                s.status === 'confirmed' ? 'confirmed' :
-                s.status === 'reviewed'  ? 'reviewed'  : 'plan'
+                isUnavailable          ? 'gray'      :
+                s.status === 'delete_requested' ? 'red'  :
+                s.status === 'confirmed'        ? 'confirmed' :
+                s.status === 'reviewed'         ? 'reviewed'  : 'plan'
               }>
-                {isUnavailable ? '不可' : s.status === 'delete_requested' ? '削除依頼' : s.status === 'confirmed' ? '確定' : s.status === 'reviewed' ? '確認済' : '予定'}
+                {isUnavailable ? '不可' :
+                  s.status === 'delete_requested' ? '削除依頼' :
+                  s.status === 'confirmed'        ? '確定' :
+                  s.status === 'reviewed'         ? '確認済' : '予定'}
               </Badge>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900">

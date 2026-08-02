@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 2026-08-02（38回目）
+### 変更内容
+- [front/src/lib/utils.ts] `toISOString()`のUTC変換による日付ズレを修正。ローカル日付文字列変換ヘルパー`toDateStr`を追加し、`todayStr`・`addDays`・`getMonthGrid`を修正
+- [front/src/lib/utils.ts] `getWeekStart`・`getTwoWeekGrid`・`getWeekLabel`を追加（2週間カレンダー用）
+- [front/src/components/MonthCalendar.tsx] 月表示カレンダーを今週+次週の2週間表示に変更。ナビゲーションを1週間単位移動に変更、今日ボタンは今日が属する週に戻る
+- [front/src/components/MonthCalendar.tsx] ヘッダーを「8/2の週 ・ 8/9の週」形式の表示に変更。月をまたぐ月初は「8/1」表記で視認性確保
+- [front/src/components/MonthCalendar.tsx] `DayShiftList`に確定>場所>帯>名前のソートを追加
+### デプロイ
+- GitHub (origin/main): プッシュ済み（Vercel自動デプロイ）
+
 ## 2026-08-02（37回目）
 ### 変更内容
 - [front/src/pages/NameSetupPage.tsx] 「別の名前を使う」ボタンを通常UIから削除。savedNameがある場合は前回の名前で自動ログインのみに変更
