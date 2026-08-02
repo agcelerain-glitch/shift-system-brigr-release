@@ -12,13 +12,14 @@ import {
   setDoc,
   deleteDoc,
   runTransaction,
+  writeBatch,
   serverTimestamp,
   deleteField,
   type Timestamp,
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured, API_BASE_URL } from './firebase';
 import { mockStore } from './mockStore';
-import type { Shift, Member, BoardPublic, BoardPrivate, ApprovalLog, ShiftStatus, TimeType, TemplateCode } from './types';
+import type { Shift, Member, BoardPublic, BoardPrivate, ApprovalLog, DeletedBoardPublic, DeletedBoardPrivate, ShiftStatus, TimeType, TemplateCode } from './types';
 
 const now = () => Date.now();
 const toMs = (t: unknown): number => {
@@ -321,9 +322,33 @@ export async function createBoardPublic(title: string, body: string, adminName: 
   await addDoc(collection(db!, 'boardPublic'), { title, body, adminName, createdAt: serverTimestamp() });
 }
 
-export async function deleteBoardPublic(id: string): Promise<void> {
-  if (!isFirebaseConfigured) return mockStore.deleteDoc('boardPublic', id);
-  await deleteDoc(doc(db!, 'boardPublic', id));
+// ソフトデリート: boardPublicDeleted に移動して元を削除
+export async function deleteBoardPublic(item: BoardPublic): Promise<void> {
+  if (!isFirebaseConfigured) { mockStore.softDeleteBoard('boardPublic', item); return; }
+  const batch = writeBatch(db!);
+  batch.set(doc(db!, 'boardPublicDeleted', item.id), { ...item, deletedAt: serverTimestamp() });
+  batch.delete(doc(db!, 'boardPublic', item.id));
+  await batch.commit();
+}
+export function subscribeBoardPublicDeleted(cb: (items: DeletedBoardPublic[]) => void): () => void {
+  if (!isFirebaseConfigured) return mockStore.subscribe('boardPublicDeleted', cb);
+  return subscribeReal<DeletedBoardPublic>(
+    query(collection(db!, 'boardPublicDeleted'), orderBy('deletedAt', 'desc')),
+    (r) => ({ id: r.id as string, title: r.title as string, body: r.body as string, adminName: r.adminName as string, createdAt: toMs(r.createdAt), deletedAt: toMs(r.deletedAt) }) as DeletedBoardPublic,
+    cb,
+  );
+}
+export async function restoreBoardPublic(item: DeletedBoardPublic): Promise<void> {
+  if (!isFirebaseConfigured) { mockStore.restoreBoard('boardPublic', item); return; }
+  const { deletedAt: _d, ...rest } = item;
+  const batch = writeBatch(db!);
+  batch.set(doc(db!, 'boardPublic', item.id), { ...rest, createdAt: serverTimestamp() });
+  batch.delete(doc(db!, 'boardPublicDeleted', item.id));
+  await batch.commit();
+}
+export async function permanentDeleteBoardPublic(id: string): Promise<void> {
+  if (!isFirebaseConfigured) { mockStore.permanentDeleteBoard('boardPublicDeleted', id); return; }
+  await deleteDoc(doc(db!, 'boardPublicDeleted', id));
 }
 
 // ---- boardPrivate ----
@@ -341,9 +366,33 @@ export async function createBoardPrivate(body: string, type: 'memo' | 'notificat
   await addDoc(collection(db!, 'boardPrivate'), { body, type, adminName, createdAt: serverTimestamp() });
 }
 
-export async function deleteBoardPrivate(id: string): Promise<void> {
-  if (!isFirebaseConfigured) return mockStore.deleteDoc('boardPrivate', id);
-  await deleteDoc(doc(db!, 'boardPrivate', id));
+// ソフトデリート: boardPrivateDeleted に移動して元を削除
+export async function deleteBoardPrivate(item: BoardPrivate): Promise<void> {
+  if (!isFirebaseConfigured) { mockStore.softDeleteBoard('boardPrivate', item); return; }
+  const batch = writeBatch(db!);
+  batch.set(doc(db!, 'boardPrivateDeleted', item.id), { ...item, deletedAt: serverTimestamp() });
+  batch.delete(doc(db!, 'boardPrivate', item.id));
+  await batch.commit();
+}
+export function subscribeBoardPrivateDeleted(cb: (items: DeletedBoardPrivate[]) => void): () => void {
+  if (!isFirebaseConfigured) return mockStore.subscribe('boardPrivateDeleted', cb);
+  return subscribeReal<DeletedBoardPrivate>(
+    query(collection(db!, 'boardPrivateDeleted'), orderBy('deletedAt', 'desc')),
+    (r) => ({ id: r.id as string, adminName: r.adminName as string, body: r.body as string, type: r.type as 'memo' | 'notification', createdAt: toMs(r.createdAt), deletedAt: toMs(r.deletedAt) }) as DeletedBoardPrivate,
+    cb,
+  );
+}
+export async function restoreBoardPrivate(item: DeletedBoardPrivate): Promise<void> {
+  if (!isFirebaseConfigured) { mockStore.restoreBoard('boardPrivate', item); return; }
+  const { deletedAt: _d, ...rest } = item;
+  const batch = writeBatch(db!);
+  batch.set(doc(db!, 'boardPrivate', item.id), { ...rest, createdAt: serverTimestamp() });
+  batch.delete(doc(db!, 'boardPrivateDeleted', item.id));
+  await batch.commit();
+}
+export async function permanentDeleteBoardPrivate(id: string): Promise<void> {
+  if (!isFirebaseConfigured) { mockStore.permanentDeleteBoard('boardPrivateDeleted', id); return; }
+  await deleteDoc(doc(db!, 'boardPrivateDeleted', id));
 }
 
 // admin用: メンバーのLINE IDを手動設定（デバッグ・初期設定用）

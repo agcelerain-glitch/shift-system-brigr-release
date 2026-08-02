@@ -66,3 +66,11 @@ export interface ApprovalLog {
   adminName: string;
   createdAt: number;
 }
+
+// 削除済み掲示板（ソフトデリート用）
+export interface DeletedBoardPublic extends BoardPublic {
+  deletedAt: number;
+}
+export interface DeletedBoardPrivate extends BoardPrivate {
+  deletedAt: number;
+}

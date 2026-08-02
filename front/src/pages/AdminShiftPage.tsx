@@ -509,10 +509,29 @@ export function AdminShiftPage() {
         <Card className="p-6"><EmptyState icon={<CheckCircle2 className="w-10 h-10" />} title="該当するシフトはありません" /></Card>
       ) : (
         <div className="space-y-2">
-          {filtered.map((s) => {
+          {filtered.flatMap((s, idx) => {
+            const getGroupLabel = (shift: Shift): string => {
+              switch (sortKey) {
+                case 'date':      return formatDateJP(shift.date);
+                case 'weekday':   return `${weekdayJP(shift.date)}曜日`;
+                case 'place':     return shift.place ?? '場所未設定';
+                case 'time':      return timeLabelOf(shift) || '時間未設定';
+                case 'name':      return shift.memberName;
+                case 'headcount': return shift.headcount ? `${shift.headcount}人` : '人数未設定';
+              }
+            };
+            const currentKey = getGroupLabel(s);
+            const prevKey = idx > 0 ? getGroupLabel(filtered[idx - 1]) : null;
             const isToday = s.date === todayStr();
             const timeLabel = timeLabelOf(s);
-            return (
+            return [
+              prevKey !== currentKey ? (
+                <div key={`div-${s.id}`} className="flex items-center gap-2 pt-1">
+                  <div className="flex-1 h-px bg-gray-200" />
+                  <span className="text-xs text-gray-400 font-medium px-2 shrink-0">{currentKey}</span>
+                  <div className="flex-1 h-px bg-gray-200" />
+                </div>
+              ) : null,
               <Card key={s.id} className={`p-4 hover:shadow-cardLg transition ${s.status === 'reviewed' ? 'opacity-70' : ''}`}>
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div className="flex-1 min-w-0">
@@ -523,7 +542,7 @@ export function AdminShiftPage() {
                         {formatDateJP(s.date)}
                       </span>
                     </div>
-                    <p className="font-medium text-gray-900">{s.memberName} · {s.subject}</p>
+                    <p className="font-medium text-gray-900">{s.subject}</p>
                     <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-500 mt-1">
                       {timeLabel && (
                         <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{timeLabel}</span>
@@ -568,8 +587,8 @@ export function AdminShiftPage() {
                     )}
                   </div>
                 </div>
-              </Card>
-            );
+              </Card>,
+            ].filter(Boolean);
           })}
         </div>
       )}

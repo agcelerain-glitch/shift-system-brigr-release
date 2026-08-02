@@ -1,4 +1,6 @@
-// /admin-board 掲示板管理: boardPrivate（非公開メモ/通知）と boardPublic（全体掲示板）の投稿・削除
+// /admin-board 掲示板管理: 全体掲示板・非公開メモ・削除済タブ
+// 削除はソフトデリート（boardPublicDeleted / boardPrivateDeleted に移動）
+// 削除済タブから復元（createdAt=復元時刻）または完全削除（2重確認）が可能
 
 import { useState } from 'react';
 import { AdminLayout } from '../components/AdminLayout';
@@ -6,14 +8,18 @@ import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { Card, Button, Input, Textarea, Select, Badge, EmptyState, Tabs } from '../components/ui';
-import { Megaphone, Lock, Trash2, Plus, Bell, FileText } from 'lucide-react';
-import { createBoardPublic, deleteBoardPublic, createBoardPrivate, deleteBoardPrivate } from '../lib/db';
+import { Megaphone, Lock, Trash2, Plus, Bell, FileText, RotateCcw, AlertTriangle } from 'lucide-react';
+import {
+  createBoardPublic, deleteBoardPublic, createBoardPrivate, deleteBoardPrivate,
+  restoreBoardPublic, restoreBoardPrivate, permanentDeleteBoardPublic, permanentDeleteBoardPrivate,
+} from '../lib/db';
 import { formatDateTimeJP } from '../lib/utils';
+import type { BoardPublic, BoardPrivate, DeletedBoardPublic, DeletedBoardPrivate } from '../lib/types';
 
-type Tab = 'public' | 'private';
+type Tab = 'public' | 'private' | 'deleted';
 
 export function AdminBoardPage() {
-  const { boardPublic, boardPrivate } = useData();
+  const { boardPublic, boardPrivate, boardPublicDeleted, boardPrivateDeleted } = useData();
   const { name } = useAuth();
   const adminName = name ?? '管理者';
   const toast = useToast();
@@ -25,6 +31,8 @@ export function AdminBoardPage() {
   // private form
   const [prBody, setPrBody] = useState('');
   const [prType, setPrType] = useState<'memo' | 'notification'>('memo');
+  // 完全削除の2重確認用: id を保持
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const submitPublic = async () => {
     if (!pTitle.trim() || !pBody.trim()) { toast.show('タイトル・本文を入力してください', 'error'); return; }
@@ -44,15 +52,41 @@ export function AdminBoardPage() {
     } catch { toast.show('保存に失敗しました', 'error'); }
   };
 
-  const removePublic = async (id: string) => {
-    try { await deleteBoardPublic(id); toast.show('削除しました', 'info'); }
+  // ソフトデリート（削除済タブへ移動）
+  const removePublic = async (item: BoardPublic) => {
+    try { await deleteBoardPublic(item); toast.show('削除しました（削除済タブで復元できます）', 'info'); }
+    catch { toast.show('削除失敗', 'error'); }
+  };
+  const removePrivate = async (item: BoardPrivate) => {
+    try { await deleteBoardPrivate(item); toast.show('削除しました（削除済タブで復元できます）', 'info'); }
     catch { toast.show('削除失敗', 'error'); }
   };
 
-  const removePrivate = async (id: string) => {
-    try { await deleteBoardPrivate(id); toast.show('削除しました', 'info'); }
-    catch { toast.show('削除失敗', 'error'); }
+  // 復元
+  const handleRestorePublic = async (item: DeletedBoardPublic) => {
+    try { await restoreBoardPublic(item); toast.show('全体掲示板に復元しました', 'success'); }
+    catch { toast.show('復元失敗', 'error'); }
   };
+  const handleRestorePrivate = async (item: DeletedBoardPrivate) => {
+    try { await restoreBoardPrivate(item); toast.show('非公開メモに復元しました', 'success'); }
+    catch { toast.show('復元失敗', 'error'); }
+  };
+
+  // 完全削除: 2重確認（1回目でidをセット → 同じボタンが「本当に削除」に変わる）
+  const handlePermanentDelete = async (id: string, type: 'public' | 'private') => {
+    if (confirmDeleteId !== id) {
+      setConfirmDeleteId(id);
+      return;
+    }
+    try {
+      if (type === 'public') await permanentDeleteBoardPublic(id);
+      else await permanentDeleteBoardPrivate(id);
+      toast.show('完全削除しました', 'info');
+      setConfirmDeleteId(null);
+    } catch { toast.show('削除失敗', 'error'); }
+  };
+
+  const deletedCount = boardPublicDeleted.length + boardPrivateDeleted.length;
 
   return (
     <AdminLayout>
@@ -66,13 +100,15 @@ export function AdminBoardPage() {
           tabs={[
             { id: 'public', label: '全体掲示板' },
             { id: 'private', label: '非公開メモ' },
+            { id: 'deleted', label: `削除済${deletedCount > 0 ? `（${deletedCount}）` : ''}` },
           ]}
           active={tab}
-          onChange={setTab}
+          onChange={(id) => { setTab(id); setConfirmDeleteId(null); }}
         />
       </div>
 
-      {tab === 'public' ? (
+      {/* ===== 全体掲示板タブ ===== */}
+      {tab === 'public' && (
         <div className="space-y-4">
           <Card className="p-5">
             <div className="flex items-center gap-2 mb-3">
@@ -103,7 +139,7 @@ export function AdminBoardPage() {
                       <p className="text-sm text-gray-700 whitespace-pre-wrap">{b.body}</p>
                       <p className="text-xs text-gray-400 mt-2">{b.adminName} · {formatDateTimeJP(b.createdAt)}</p>
                     </div>
-                    <button onClick={() => removePublic(b.id)} className="text-gray-300 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50" title="削除">
+                    <button onClick={() => removePublic(b)} className="text-gray-300 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50 transition" title="削除（復元可能）">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -112,7 +148,10 @@ export function AdminBoardPage() {
             )}
           </div>
         </div>
-      ) : (
+      )}
+
+      {/* ===== 非公開メモタブ ===== */}
+      {tab === 'private' && (
         <div className="space-y-4">
           <Card className="p-5 border-slate-200">
             <div className="flex items-center gap-2 mb-3">
@@ -150,7 +189,7 @@ export function AdminBoardPage() {
                       <p className="text-sm text-gray-700 whitespace-pre-wrap">{b.body}</p>
                       <p className="text-xs text-gray-400 mt-2">{b.adminName} · {formatDateTimeJP(b.createdAt)}</p>
                     </div>
-                    <button onClick={() => removePrivate(b.id)} className="text-gray-300 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50">
+                    <button onClick={() => removePrivate(b)} className="text-gray-300 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50 transition">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -158,6 +197,119 @@ export function AdminBoardPage() {
               ))
             )}
           </div>
+        </div>
+      )}
+
+      {/* ===== 削除済タブ ===== */}
+      {tab === 'deleted' && (
+        <div className="space-y-4">
+          {deletedCount === 0 ? (
+            <Card className="p-6"><EmptyState icon={<Trash2 className="w-10 h-10" />} title="削除済みの投稿はありません" /></Card>
+          ) : (
+            <>
+              {/* 全体掲示板（削除済） */}
+              {boardPublicDeleted.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 mb-2 flex items-center gap-1 px-1">
+                    <Megaphone className="w-3.5 h-3.5" />全体掲示板（削除済）
+                  </p>
+                  <div className="space-y-2">
+                    {boardPublicDeleted.map((b) => (
+                      <Card key={b.id} className="p-4 border-dashed border-gray-300 bg-gray-50/50">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <h3 className="font-semibold text-gray-700">{b.title}</h3>
+                              <Badge color="gray">削除済</Badge>
+                            </div>
+                            <p className="text-sm text-gray-500 whitespace-pre-wrap">{b.body}</p>
+                            <p className="text-xs text-gray-400 mt-2">
+                              {b.adminName} · 投稿: {formatDateTimeJP(b.createdAt)} · 削除: {formatDateTimeJP(b.deletedAt)}
+                            </p>
+                          </div>
+                          <div className="flex flex-col gap-1.5 shrink-0">
+                            <Button size="sm" variant="secondary" onClick={() => handleRestorePublic(b)}>
+                              <RotateCcw className="w-3.5 h-3.5" />復元
+                            </Button>
+                            {confirmDeleteId === b.id ? (
+                              <div className="flex flex-col gap-1">
+                                <Button size="sm" variant="danger" onClick={() => handlePermanentDelete(b.id, 'public')}>
+                                  <AlertTriangle className="w-3.5 h-3.5" />本当に削除
+                                </Button>
+                                <button
+                                  onClick={() => setConfirmDeleteId(null)}
+                                  className="text-xs text-gray-400 hover:text-gray-600 text-center py-0.5"
+                                >
+                                  キャンセル
+                                </button>
+                              </div>
+                            ) : (
+                              <Button size="sm" variant="danger" onClick={() => handlePermanentDelete(b.id, 'public')}>
+                                <Trash2 className="w-3.5 h-3.5" />完全削除
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 非公開メモ（削除済） */}
+              {boardPrivateDeleted.length > 0 && (
+                <div>
+                  {boardPublicDeleted.length > 0 && <div className="border-t border-gray-200 my-1" />}
+                  <p className="text-xs font-semibold text-gray-500 mb-2 flex items-center gap-1 px-1">
+                    <Lock className="w-3.5 h-3.5" />非公開メモ（削除済）
+                  </p>
+                  <div className="space-y-2">
+                    {boardPrivateDeleted.map((b) => (
+                      <Card key={b.id} className="p-4 border-dashed border-gray-300 bg-gray-50/50">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              {b.type === 'memo' ? <FileText className="w-4 h-4 text-slate-300" /> : <Bell className="w-4 h-4 text-amber-300" />}
+                              <Badge color="gray">{b.type === 'memo' ? 'メモ（削除済）' : '通知（削除済）'}</Badge>
+                            </div>
+                            <p className="text-sm text-gray-500 whitespace-pre-wrap">{b.body}</p>
+                            <p className="text-xs text-gray-400 mt-2">
+                              {b.adminName} · 投稿: {formatDateTimeJP(b.createdAt)} · 削除: {formatDateTimeJP(b.deletedAt)}
+                            </p>
+                          </div>
+                          <div className="flex flex-col gap-1.5 shrink-0">
+                            <Button size="sm" variant="secondary" onClick={() => handleRestorePrivate(b)}>
+                              <RotateCcw className="w-3.5 h-3.5" />復元
+                            </Button>
+                            {confirmDeleteId === b.id ? (
+                              <div className="flex flex-col gap-1">
+                                <Button size="sm" variant="danger" onClick={() => handlePermanentDelete(b.id, 'private')}>
+                                  <AlertTriangle className="w-3.5 h-3.5" />本当に削除
+                                </Button>
+                                <button
+                                  onClick={() => setConfirmDeleteId(null)}
+                                  className="text-xs text-gray-400 hover:text-gray-600 text-center py-0.5"
+                                >
+                                  キャンセル
+                                </button>
+                              </div>
+                            ) : (
+                              <Button size="sm" variant="danger" onClick={() => handlePermanentDelete(b.id, 'private')}>
+                                <Trash2 className="w-3.5 h-3.5" />完全削除
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+          <p className="text-xs text-gray-400 text-center px-2">
+            復元すると投稿時刻は復元した時刻として記録されます。完全削除は取り消せません。
+          </p>
         </div>
       )}
     </AdminLayout>

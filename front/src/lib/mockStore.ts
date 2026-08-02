@@ -1,6 +1,6 @@
 // モックデータストア: Firebase未接続時に onSnapshot 互換のリアルタイム購読を再現
 
-import type { Shift, Member, BoardPublic, BoardPrivate, ApprovalLog, ShiftStatus, TimeType, TemplateCode } from './types';
+import type { Shift, Member, BoardPublic, BoardPrivate, ApprovalLog, DeletedBoardPublic, DeletedBoardPrivate, ShiftStatus, TimeType, TemplateCode } from './types';
 
 export type Listener<T> = (items: T[]) => void;
 
@@ -13,6 +13,8 @@ interface StoreState {
   shifts: Shift[];
   boardPublic: BoardPublic[];
   boardPrivate: BoardPrivate[];
+  boardPublicDeleted: DeletedBoardPublic[];
+  boardPrivateDeleted: DeletedBoardPrivate[];
   approvalLogs: ApprovalLog[];
 }
 
@@ -74,6 +76,8 @@ const state: StoreState = {
   shifts: seedShifts,
   boardPublic: seedBoardPublic,
   boardPrivate: seedBoardPrivate,
+  boardPublicDeleted: [],
+  boardPrivateDeleted: [],
   approvalLogs: [],
 };
 
@@ -82,6 +86,8 @@ const listeners: Record<string, Set<Listener<unknown>>> = {
   shifts: new Set(),
   boardPublic: new Set(),
   boardPrivate: new Set(),
+  boardPublicDeleted: new Set(),
+  boardPrivateDeleted: new Set(),
   approvalLogs: new Set(),
 };
 
@@ -197,5 +203,27 @@ export const mockStore = {
   createBoardPrivate(body: string, type: 'memo' | 'notification', adminName: string) {
     state.boardPrivate.unshift({ id: `bpr${Date.now()}`, adminName, body, type, createdAt: Date.now() });
     notify('boardPrivate');
+  },
+
+  softDeleteBoard(key: 'boardPublic' | 'boardPrivate', item: BoardPublic | BoardPrivate) {
+    const deletedKey = key === 'boardPublic' ? 'boardPublicDeleted' : 'boardPrivateDeleted';
+    (state[key] as (BoardPublic | BoardPrivate)[]) = (state[key] as (BoardPublic | BoardPrivate)[]).filter((x) => x.id !== item.id);
+    (state[deletedKey] as (DeletedBoardPublic | DeletedBoardPrivate)[]).unshift({ ...item, deletedAt: Date.now() } as never);
+    notify(key);
+    notify(deletedKey);
+  },
+
+  restoreBoard(key: 'boardPublic' | 'boardPrivate', item: DeletedBoardPublic | DeletedBoardPrivate) {
+    const deletedKey = key === 'boardPublic' ? 'boardPublicDeleted' : 'boardPrivateDeleted';
+    const { deletedAt: _d, ...rest } = item;
+    (state[deletedKey] as (DeletedBoardPublic | DeletedBoardPrivate)[]) = (state[deletedKey] as (DeletedBoardPublic | DeletedBoardPrivate)[]).filter((x) => x.id !== item.id);
+    (state[key] as (BoardPublic | BoardPrivate)[]).unshift({ ...rest, createdAt: Date.now() } as never);
+    notify(deletedKey);
+    notify(key);
+  },
+
+  permanentDeleteBoard(key: 'boardPublicDeleted' | 'boardPrivateDeleted', id: string) {
+    (state[key] as (DeletedBoardPublic | DeletedBoardPrivate)[]) = (state[key] as (DeletedBoardPublic | DeletedBoardPrivate)[]).filter((x) => x.id !== id);
+    notify(key);
   },
 };

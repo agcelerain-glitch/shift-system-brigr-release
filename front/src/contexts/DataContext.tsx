@@ -6,16 +6,20 @@ import {
   subscribeShifts,
   subscribeBoardPublic,
   subscribeBoardPrivate,
+  subscribeBoardPublicDeleted,
+  subscribeBoardPrivateDeleted,
   subscribeApprovalLogs,
 } from '../lib/db';
 import { useAuth } from './AuthContext';
-import type { Member, Shift, BoardPublic, BoardPrivate, ApprovalLog } from '../lib/types';
+import type { Member, Shift, BoardPublic, BoardPrivate, ApprovalLog, DeletedBoardPublic, DeletedBoardPrivate } from '../lib/types';
 
 interface DataCtx {
   members: Member[];
   shifts: Shift[];
   boardPublic: BoardPublic[];
   boardPrivate: BoardPrivate[];
+  boardPublicDeleted: DeletedBoardPublic[];
+  boardPrivateDeleted: DeletedBoardPrivate[];
   approvalLogs: ApprovalLog[];
   loaded: boolean;
   firestoreError: string | null;
@@ -30,6 +34,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [boardPublic, setBoardPublic] = useState<BoardPublic[]>([]);
   const [boardPrivate, setBoardPrivate] = useState<BoardPrivate[]>([]);
+  const [boardPublicDeleted, setBoardPublicDeleted] = useState<DeletedBoardPublic[]>([]);
+  const [boardPrivateDeleted, setBoardPrivateDeleted] = useState<DeletedBoardPrivate[]>([]);
   const [approvalLogs, setApprovalLogs] = useState<ApprovalLog[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [firestoreError, setFirestoreError] = useState<string | null>(null);
@@ -43,6 +49,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setMembers([]);
       setBoardPublic([]);
       setBoardPrivate([]);
+      setBoardPublicDeleted([]);
+      setBoardPrivateDeleted([]);
       setApprovalLogs([]);
       setLoaded(false);
       return;
@@ -76,13 +84,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
       safeSubscribe(subscribeBoardPrivate, setBoardPrivate, 'boardPrivate'),
       safeSubscribe(subscribeApprovalLogs, setApprovalLogs, 'approvalLogs'),
     ];
+    // admin専用コレクション（削除済み掲示板）
+    if (role === 'admin') {
+      unsubs.push(
+        safeSubscribe(subscribeBoardPublicDeleted, setBoardPublicDeleted, 'boardPublicDeleted'),
+        safeSubscribe(subscribeBoardPrivateDeleted, setBoardPrivateDeleted, 'boardPrivateDeleted'),
+      );
+    }
     setLoaded(true);
 
     return () => unsubs.forEach((u) => u());
   }, [role, initializing, refreshKey]); // auth状態またはrefreshKeyが変わるたびに再購読
 
   return (
-    <Ctx.Provider value={{ members, shifts, boardPublic, boardPrivate, approvalLogs, loaded, firestoreError, refresh }}>
+    <Ctx.Provider value={{ members, shifts, boardPublic, boardPrivate, boardPublicDeleted, boardPrivateDeleted, approvalLogs, loaded, firestoreError, refresh }}>
       {children}
     </Ctx.Provider>
   );
