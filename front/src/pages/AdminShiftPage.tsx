@@ -80,13 +80,16 @@ export function AdminShiftPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingMember, setDeletingMember] = useState(false);
   const [summarySelectedDate, setSummarySelectedDate] = useState<string | null>(null);
-  // 調整マーク（プレビューで名前タップしてマーク）: 復元ログにも反映
-  const [markedMembers, setMarkedMembers] = useState<Set<string>>(new Set());
-  const toggleMark = (memberName: string) =>
-    setMarkedMembers((prev) => { const next = new Set(prev); next.has(memberName) ? next.delete(memberName) : next.add(memberName); return next; });
+  // 調整マーク: "YYYY-MM-DD_名前" キーで日付+名前の組み合わせを管理
+  const [markedKeys, setMarkedKeys] = useState<Set<string>>(new Set());
+  const mkKey = (date: string, memberName: string) => `${date}_${memberName}`;
+  const toggleMark = (date: string, memberName: string) => {
+    const key = mkKey(date, memberName);
+    setMarkedKeys((prev) => { const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next; });
+  };
   // 復元ログ用の検索・ソート
   const [logSearch, setLogSearch] = useState('');
-  const [logSortKey, setLogSortKey] = useState<'date' | 'place' | 'name'>('date');
+  const [logSortKey, setLogSortKey] = useState<'date' | 'place' | 'name' | 'marked'>('date');
 
   // 承認時の場所指定モーダル
   const [approvingShift, setApprovingShift] = useState<Shift | null>(null);
@@ -228,6 +231,12 @@ export function AdminShiftPage() {
     logs.sort((a, b) => {
       const ba = a.beforeState;
       const bb = b.beforeState;
+      if (logSortKey === 'marked') {
+        const ma = ba ? (markedKeys.has(mkKey(ba.date, ba.memberName)) ? 0 : 1) : 1;
+        const mb = bb ? (markedKeys.has(mkKey(bb.date, bb.memberName)) ? 0 : 1) : 1;
+        if (ma !== mb) return ma - mb;
+        return (bb?.date ?? '').localeCompare(ba?.date ?? '');
+      }
       switch (logSortKey) {
         case 'date':  return (bb?.date ?? '').localeCompare(ba?.date ?? '');
         case 'place': return (ba?.place ?? '').localeCompare(bb?.place ?? '', 'ja');
@@ -235,7 +244,7 @@ export function AdminShiftPage() {
       }
     });
     return logs;
-  }, [approvalLogs, logSearch, logSortKey]);
+  }, [approvalLogs, logSearch, logSortKey, markedKeys]);
 
   const doAdminDelete = async (s: Shift) => {
     if (!window.confirm(`${s.memberName}さんの「${formatDateJP(s.date)} ${s.subject}」を完全削除しますか？\nこの操作は取り消せません。`)) return;
@@ -395,9 +404,9 @@ export function AdminShiftPage() {
               {formatDateJP(summarySelectedDate)} のシフト詳細
             </p>
             <div className="flex items-center gap-2">
-              {markedMembers.size > 0 && (
+              {markedKeys.size > 0 && (
                 <span className="text-xs text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full border border-orange-200">
-                  調整対象 {markedMembers.size}人
+                  調整対象 {markedKeys.size}件
                 </span>
               )}
               <button
@@ -433,15 +442,15 @@ export function AdminShiftPage() {
                           {tg.members.map((s) => (
                             <button
                               key={s.id}
-                              onClick={() => toggleMark(s.memberName)}
+                              onClick={() => toggleMark(summarySelectedDate!, s.memberName)}
                               className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
-                                markedMembers.has(s.memberName)
+                                markedKeys.has(mkKey(summarySelectedDate!, s.memberName))
                                   ? 'bg-orange-500 text-white ring-2 ring-orange-300 shadow-sm'
                                   : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
                               }`}
                             >
                               {s.memberName}
-                              {markedMembers.has(s.memberName) && (
+                              {markedKeys.has(mkKey(summarySelectedDate!, s.memberName)) && (
                                 <span className="ml-1 text-orange-100 text-xs">調整</span>
                               )}
                             </button>
@@ -795,7 +804,7 @@ export function AdminShiftPage() {
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
                                 <span className="text-sm font-medium text-gray-900">{s.memberName}</span>
-                                {markedMembers.has(s.memberName) && (
+                                {markedKeys.has(mkKey(s.date, s.memberName)) && (
                                   <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-orange-100 text-orange-600">調整</span>
                                 )}
                               </div>
@@ -835,19 +844,28 @@ export function AdminShiftPage() {
                       value={logSearch}
                       onChange={(e) => setLogSearch(e.target.value)}
                     />
-                    <div className="flex gap-1">
-                      {(['date', 'place', 'name'] as const).map((key) => (
+                    <div className="flex gap-1 flex-wrap">
+                      {([
+                        { key: 'date', label: '日付' },
+                        { key: 'place', label: '場所' },
+                        { key: 'name', label: '名前' },
+                        { key: 'marked', label: '調整対象' },
+                      ] as const).map(({ key, label }) => (
                         <button
                           key={key}
                           onClick={() => setLogSortKey(key)}
-                          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition ${logSortKey === key ? 'bg-slate-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition ${
+                            logSortKey === key
+                              ? key === 'marked' ? 'bg-orange-500 text-white' : 'bg-slate-800 text-white'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          }`}
                         >
-                          {key === 'date' ? '日付' : key === 'place' ? '場所' : '名前'}
+                          {label}
                         </button>
                       ))}
-                      {markedMembers.size > 0 && (
-                        <span className="ml-auto text-[10px] text-orange-600 bg-orange-50 px-2 py-1 rounded-lg">
-                          調整マーク {markedMembers.size}人
+                      {markedKeys.size > 0 && (
+                        <span className="ml-auto text-[10px] text-orange-600 bg-orange-50 px-2 py-1 rounded-lg self-center">
+                          調整 {markedKeys.size}件
                         </span>
                       )}
                     </div>
@@ -856,7 +874,7 @@ export function AdminShiftPage() {
                     {filteredLogs.map((log) => {
                       const expired = !isPast7Days(log.createdAt);
                       const before = log.beforeState;
-                      const isMarked = before ? markedMembers.has(before.memberName) : false;
+                      const isMarked = before ? markedKeys.has(mkKey(before.date, before.memberName)) : false;
                       return (
                         <div
                           key={log.id}
