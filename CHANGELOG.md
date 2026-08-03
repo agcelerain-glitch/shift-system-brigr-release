@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 2026-08-03（48回目）
+### 変更内容
+- [back/src/remind.js] 新規作成。毎週金曜 JST 8:00（UTC 23:00）に来週（月〜日）のシフト未提出メンバーへ LINE 個別通知。LINE 未登録者は管理者サマリーに ⚠️ 表示。全員提出済み時も管理者へ通知。`--dry-run` / `--force` オプション対応
+### Heroku Scheduler 追加設定
+- コマンド: `node src/remind.js`
+- 頻度: Daily / 11:00 PM UTC（= JST 翌朝 8:00）
+### デプロイ
+- GitHub (origin/main): プッシュ済み（Vercel自動デプロイ）
+- Heroku (back): プッシュ必要
+
 ## 2026-08-03（47回目）
 ### 変更内容
 - [back/package.json] `firebase-admin` を 12.x → 13.10.0 にアップグレード（脆弱性8件中5件を解消）。`overrides.uuid: ">=11.1.1"` を追加して残り3件（google-gax 経由の uuid@9 chain）を解消 → 合計 0 vulnerabilities
