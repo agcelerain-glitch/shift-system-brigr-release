@@ -327,7 +327,8 @@ app.post('/shift-request/respond', async (req, res, next) => {
       const placeLabel = inviteData.place ?? requestData.place ?? '';
       const timeLabelVal = inviteData.timeLabel ?? '';
 
-      const notifyMsg = `【出勤依頼結果通知】\n${dateLabel} ${placeLabel} ${timeLabelVal}\n${memberName}: ${responseLabel}\n残り${remaining}人`;
+      const commentLine = userComment ? `\nコメント: ${userComment}` : '';
+      const notifyMsg = `【出勤依頼結果通知】\n${dateLabel} ${placeLabel} ${timeLabelVal}\n${memberName}: ${responseLabel}${commentLine}\n残り${remaining}人`;
 
       const adminSnap = await db.collection('members').where('role', '==', 'admin').get();
       const adminLineIds = adminSnap.docs.map(d => d.data().lineUserId).filter(Boolean);
