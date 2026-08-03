@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 2026-08-03（47回目）
+### 変更内容
+- [back/package.json] `firebase-admin` を 12.x → 13.10.0 にアップグレード（脆弱性8件中5件を解消）。`overrides.uuid: ">=11.1.1"` を追加して残り3件（google-gax 経由の uuid@9 chain）を解消 → 合計 0 vulnerabilities
+- [back/src/clean.js] 削除完了時（合計1件以上）に `LINE_SELF_USER_ID` へ LINE 通知。エラー時も通知。dry-run 時は通知しない
+- [back/src/app.js] `process.on('unhandledRejection')` / `process.on('uncaughtException')` ハンドラーを追加。Express 外の未捕捉エラーも `notifySelfError` で LINE_SELF_USER_ID に通知
+### デプロイ
+- GitHub (origin/main): プッシュ済み（Vercel自動デプロイ）
+- Heroku (back): プッシュ必要
+
 ## 2026-08-03（46回目）
 ### 変更内容
 - [front/src/lib/db.ts] `subscribeApprovalLogs` に `where('createdAt', '>=', 7日前)` フィルターを追加。8日以上前のログをDB購読段階で除外し、Firestore読み取り件数を削減（課金対策）

@@ -14,12 +14,15 @@
  *
  * 環境変数:
  *   CLEAN_THRESHOLD_DAYS  : 削除閾値（日数）。未設定時は 22 日
+ *   LINE_SELF_USER_ID     : 通知先 LINE ユーザーID（設定時のみ通知）
+ *   CHANNEL_ACCESS_TOKEN  : LINE Messaging API トークン
  *
  * オプション:
- *   --dry-run  : 削除せず対象件数のみ表示（動作確認用）
+ *   --dry-run  : 削除せず対象件数のみ表示（動作確認用・LINE通知なし）
  */
 
 const admin = require('firebase-admin');
+const { messagingApi } = require('@line/bot-sdk');
 
 const DRY_RUN = process.argv.includes('--dry-run');
 const THRESHOLD_DAYS = parseInt(process.env.CLEAN_THRESHOLD_DAYS ?? '22', 10);
@@ -61,6 +64,24 @@ if (!admin.apps.length) {
 }
 
 const db = admin.firestore();
+
+// LINE通知: dry-run 時は送信しない。CHANNEL_ACCESS_TOKEN / LINE_SELF_USER_ID 未設定時はスキップ
+async function notifyLine(text) {
+  if (DRY_RUN) return;
+  const selfId = process.env.LINE_SELF_USER_ID;
+  const token = process.env.CHANNEL_ACCESS_TOKEN;
+  if (!selfId || !token) return;
+  try {
+    const client = new messagingApi.MessagingApiClient({ channelAccessToken: token });
+    await client.pushMessage({ to: selfId, messages: [{ type: 'text', text }] });
+  } catch (e) {
+    console.error('[clean] LINE通知失敗:', e?.message ?? e);
+  }
+}
+
+function nowJST() {
+  return new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
+}
 
 function toUTCDateStr(d) {
   const y = d.getUTCFullYear();
@@ -128,10 +149,19 @@ async function main() {
       processByTimestamp('boardPrivateDeleted', 'deletedAt', cutoffDate),
       processByTimestamp('approvalLogs', 'createdAt', cutoffDate),
     ]);
+    const total = s + bp + bpv + al;
     const label = DRY_RUN ? '対象' : '削除';
-    console.log(`[clean] ${mode}完了 — 合計 ${s + bp + bpv + al}件${label} (shifts:${s} boardPublicDeleted:${bp} boardPrivateDeleted:${bpv} approvalLogs:${al})`);
+    console.log(`[clean] ${mode}完了 — 合計 ${total}件${label} (shifts:${s} boardPublicDeleted:${bp} boardPrivateDeleted:${bpv} approvalLogs:${al})`);
+
+    // 実削除があった場合のみ LINE 通知（0件はスキップして静音）
+    if (!DRY_RUN && total > 0) {
+      await notifyLine(
+        `[定期クリーン完了]\n${nowJST()}\n\n合計 ${total}件削除\n・シフト: ${s}件\n・掲示板削除済: ${bp + bpv}件\n・承認ログ: ${al}件\n（${THRESHOLD_DAYS}日以前のデータ）`
+      );
+    }
   } catch (e) {
     console.error('[clean] エラー:', e?.message ?? e);
+    await notifyLine(`[クリーンジョブ失敗]\n${nowJST()}\nエラー: ${e?.message ?? e}`);
     process.exit(1);
   }
 }

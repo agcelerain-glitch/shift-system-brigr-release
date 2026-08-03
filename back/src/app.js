@@ -630,5 +630,18 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ ok: false, message: msg });
 });
 
+// Express の外側で発生した未捕捉エラーを LINE に通知してからプロセス終了
+process.on('unhandledRejection', (reason) => {
+  const msg = reason instanceof Error ? reason.message : String(reason);
+  console.error('[unhandledRejection]', msg);
+  notifySelfError('unhandledRejection', 'Promise', msg).catch(() => {}).finally(() => process.exit(1));
+});
+
+process.on('uncaughtException', (err) => {
+  const msg = err?.message ?? String(err);
+  console.error('[uncaughtException]', msg);
+  notifySelfError('uncaughtException', 'process', msg).catch(() => {}).finally(() => process.exit(1));
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`back server on port ${PORT}`));
