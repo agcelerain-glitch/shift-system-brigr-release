@@ -1,13 +1,14 @@
 // ルートガード: role別に閲覧制限。未認証・role不一致は適切なログインへ遷移
 
 import type { ReactNode } from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import type { Role } from '../lib/types';
 
 export function RequireRole({ role, children }: { role: Role; children: ReactNode }) {
   const { role: current, name, initializing } = useAuth();
   const loc = useLocation();
+  const [searchParams] = useSearchParams();
 
   if (initializing) {
     return (
@@ -22,6 +23,10 @@ export function RequireRole({ role, children }: { role: Role; children: ReactNod
   }
   if (current !== role) {
     return <Navigate to={current === 'admin' ? '/admin-shift' : '/'} replace />;
+  }
+  // ?dev=1 が付いている場合は名前再設定画面へ（開発者モード・名前リセットURL）
+  if (searchParams.get('dev') === '1') {
+    return <Navigate to="/name-setup?dev=1" replace />;
   }
   // user/admin ともに名前入力が必要
   if (!name) {
