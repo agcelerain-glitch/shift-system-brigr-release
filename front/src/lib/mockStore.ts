@@ -110,9 +110,9 @@ export const mockStore = {
     const existing = state.members.find((m) => m.name === name);
     if (existing) {
       existing.updatedAt = Date.now();
-      if (role) existing.role = role;
+      if (role === 'admin') existing.role = role; // adminのみ上書き（降格防止）
     } else {
-      state.members.push({ id: `m${Date.now()}`, name, createdAt: Date.now(), updatedAt: Date.now(), role });
+      state.members.push({ id: `m${Date.now()}`, name, createdAt: Date.now(), updatedAt: Date.now(), role: role === 'admin' ? role : undefined });
     }
     notify('members');
   },

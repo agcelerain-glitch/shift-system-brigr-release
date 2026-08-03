@@ -54,7 +54,8 @@ export function subscribeMembers(cb: (items: Member[]) => void): () => void {
 
 export async function upsertMember(name: string, role?: Role): Promise<void> {
   const payload: Record<string, unknown> = { name, updatedAt: serverTimestamp() };
-  if (role) payload.role = role;
+  // adminの場合のみ書き込む。userではroleを書かず、setDoc mergeで既存adminフィールドを保持
+  if (role === 'admin') payload.role = role;
   if (!isFirebaseConfigured) return mockStore.upsertMember(name, role);
   // nameで既存を探してupsert
   const q = query(collection(db!, 'members'), where('name', '==', name));
