@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## 2026-08-04（61回目）
+### 変更内容
+- [front/src/pages/AdminLinePage.tsx] ポジション配置テンプレート修正：「キャシャーン」→「キャッシャー」、other1→「全体」固定、other2→「ベガ(フロント)」固定、末尾に「その他（other1）」を追加
+- [front/src/pages/AdminLinePage.tsx] 固定常駐メンバー12名（松村・中嶋・笠井・下村・樋口・雪愛・保坂・金田・奈良・今福・大澤・遠藤）をポジション配置の担当者チップに常時表示（バイトシフト確定メンバーと統合、固定メンバーは背景グレーで区別）
+- [front/src/pages/AdminLinePage.tsx] グループ送信①タイトル変更：「シフト連絡など」→「お知らせなど」
+- [front/src/pages/AdminLinePage.tsx] グループ送信③「シフト連絡」新規追加：週選択UI（前週/今週/次週）・確定シフトのピボットプレビュー（日付→場所→時間帯→名前）・名簿外の人の追加機能（日付・場所・名前入力）・二重確認ダイアログ付き送信
+- [front/src/pages/AdminLinePage.tsx] PCレイアウト変更：左列に送信①③（縦並び）、右列に送信②（1列独占）
+
+## 2026-08-03（60回目）
+### 変更内容
+- [front/src/components/MonthCalendar.tsx] カレンダーセルの色引きキーを memberName → place に変更（場所ベースの色分け）。凡例を全体表示時は場所カラードット / 個人表示時はステータスバッジに切り替え。DayShiftList を場所ごとにグループ化し「— 場所名 —」区切り線を追加（ユーザーカレンダー・管理者LINEページ両方に反映）
+- [front/src/pages/CalendarPage.tsx] memberColorForIndex を廃止し、PLACE_COLOR_MAP（5色固定）に変更。全体表示時のみ場所色マップを MonthCalendar に渡す
+
 ## 2026-08-03（59回目）
 ### 変更内容
 - [back/src/app.js] /shift-request/respond の管理者LINE通知メッセージにユーザーコメント（userComment）を追加（「コメント: …」行として末尾に付加）
