@@ -4,7 +4,7 @@
 ### 変更内容
 - [front/src/lib/db.ts] `subscribeApprovalLogs` に `where('createdAt', '>=', 7日前)` フィルターを追加。8日以上前のログをDB購読段階で除外し、Firestore読み取り件数を削減（課金対策）
 - [front/src/pages/AdminShiftPage.tsx] `doRestore` に try/catch を追加。楽観ロック競合時（conflict）に「競合: 別のadminが同時操作中です。画面を更新してから再試行してください」をトースト表示。その他例外もエラートーストで通知
-- [back/src/clean.js] 新規作成。Heroku Scheduler（UTC 3:00 AM / JST 12:00）で `node src/clean.js` として実行する22日自動削除スクリプト。shifts（date < 22日前）・boardPublicDeleted（deletedAt < 22日前）・boardPrivateDeleted（deletedAt < 22日前）・approvalLogs（createdAt < 22日前）を一括バッチ削除
+- [back/src/clean.js] 新規作成・改良。Heroku Scheduler（UTC 3:00 AM / JST 12:00）で `node src/clean.js` として実行する22日自動削除スクリプト。`--dry-run` フラグで削除せず対象件数のみ表示。`CLEAN_THRESHOLD_DAYS` 環境変数で閾値変更可能（テスト用）
 ### デプロイ
 - GitHub (origin/main): プッシュ済み（Vercel自動デプロイ）
 - Heroku (back): プッシュ済み

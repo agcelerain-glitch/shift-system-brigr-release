@@ -6,14 +6,23 @@
  *   コマンド: node src/clean.js
  *   頻度: Daily / 03:00 AM UTC (JST 12:00 PM)
  *
- * 削除対象（22日を超えたもの）:
- *   - shifts          : date フィールド ("YYYY-MM-DD") で判定
+ * 削除対象（閾値日数を超えたもの）:
+ *   - shifts              : date フィールド ("YYYY-MM-DD") で判定
  *   - boardPublicDeleted  : deletedAt Timestamp で判定
  *   - boardPrivateDeleted : deletedAt Timestamp で判定
- *   - approvalLogs    : createdAt Timestamp で判定（7日で復元不可だが22日でDB削除）
+ *   - approvalLogs        : createdAt Timestamp で判定
+ *
+ * 環境変数:
+ *   CLEAN_THRESHOLD_DAYS  : 削除閾値（日数）。未設定時は 22 日
+ *
+ * オプション:
+ *   --dry-run  : 削除せず対象件数のみ表示（動作確認用）
  */
 
 const admin = require('firebase-admin');
+
+const DRY_RUN = process.argv.includes('--dry-run');
+const THRESHOLD_DAYS = parseInt(process.env.CLEAN_THRESHOLD_DAYS ?? '22', 10);
 
 function parseFirebasePrivateKey(raw) {
   if (!raw) return null;
@@ -44,7 +53,6 @@ if (!admin.apps.length) {
 }
 
 const db = admin.firestore();
-const THRESHOLD_DAYS = 22;
 
 function toUTCDateStr(d) {
   const y = d.getUTCFullYear();
@@ -72,20 +80,29 @@ async function batchDelete(docs) {
 }
 
 // shifts: date フィールド (YYYY-MM-DD) で判定
-async function deleteOldShifts(cutoffDate) {
+async function processOldShifts(cutoffDate) {
   const cutoffStr = toUTCDateStr(cutoffDate);
   const snap = await db.collection('shifts').where('date', '<', cutoffStr).get();
-  if (snap.empty) { console.log('[clean] shifts: 削除対象なし'); return 0; }
+  if (snap.empty) { console.log('[clean] shifts: 対象なし'); return 0; }
+  if (DRY_RUN) {
+    console.log(`[clean][DRY-RUN] shifts: ${snap.size}件が削除対象 (date < ${cutoffStr})`);
+    snap.docs.forEach((d) => console.log(`  - ${d.id}: date=${d.data().date} name=${d.data().memberName}`));
+    return snap.size;
+  }
   await batchDelete(snap.docs);
   console.log(`[clean] shifts: ${snap.size}件削除 (date < ${cutoffStr})`);
   return snap.size;
 }
 
-// Timestamp フィールドで判定する汎用削除
-async function deleteByTimestamp(collectionName, field, cutoffDate) {
+// Timestamp フィールドで判定する汎用処理
+async function processByTimestamp(collectionName, field, cutoffDate) {
   const cutoff = admin.firestore.Timestamp.fromDate(cutoffDate);
   const snap = await db.collection(collectionName).where(field, '<', cutoff).get();
-  if (snap.empty) { console.log(`[clean] ${collectionName}: 削除対象なし`); return 0; }
+  if (snap.empty) { console.log(`[clean] ${collectionName}: 対象なし`); return 0; }
+  if (DRY_RUN) {
+    console.log(`[clean][DRY-RUN] ${collectionName}: ${snap.size}件が削除対象 (${field} < ${cutoffDate.toISOString()})`);
+    return snap.size;
+  }
   await batchDelete(snap.docs);
   console.log(`[clean] ${collectionName}: ${snap.size}件削除`);
   return snap.size;
@@ -93,16 +110,18 @@ async function deleteByTimestamp(collectionName, field, cutoffDate) {
 
 async function main() {
   const cutoffDate = new Date(Date.now() - THRESHOLD_DAYS * 24 * 60 * 60 * 1000);
-  console.log(`[clean] 開始 — ${THRESHOLD_DAYS}日以前 (${toUTCDateStr(cutoffDate)}) のデータを削除`);
+  const mode = DRY_RUN ? '[DRY-RUN] ' : '';
+  console.log(`[clean] ${mode}開始 — ${THRESHOLD_DAYS}日以前 (${toUTCDateStr(cutoffDate)}) のデータを対象`);
 
   try {
     const [s, bp, bpv, al] = await Promise.all([
-      deleteOldShifts(cutoffDate),
-      deleteByTimestamp('boardPublicDeleted', 'deletedAt', cutoffDate),
-      deleteByTimestamp('boardPrivateDeleted', 'deletedAt', cutoffDate),
-      deleteByTimestamp('approvalLogs', 'createdAt', cutoffDate),
+      processOldShifts(cutoffDate),
+      processByTimestamp('boardPublicDeleted', 'deletedAt', cutoffDate),
+      processByTimestamp('boardPrivateDeleted', 'deletedAt', cutoffDate),
+      processByTimestamp('approvalLogs', 'createdAt', cutoffDate),
     ]);
-    console.log(`[clean] 完了 — 合計 ${s + bp + bpv + al}件削除 (shifts:${s} boardPublicDeleted:${bp} boardPrivateDeleted:${bpv} approvalLogs:${al})`);
+    const label = DRY_RUN ? '対象' : '削除';
+    console.log(`[clean] ${mode}完了 — 合計 ${s + bp + bpv + al}件${label} (shifts:${s} boardPublicDeleted:${bp} boardPrivateDeleted:${bpv} approvalLogs:${al})`);
   } catch (e) {
     console.error('[clean] エラー:', e?.message ?? e);
     process.exit(1);
