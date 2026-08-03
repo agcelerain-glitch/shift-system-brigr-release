@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 2026-08-03（59回目）
+### 変更内容
+- [back/src/app.js] /shift-request/respond の管理者LINE通知メッセージにユーザーコメント（userComment）を追加（「コメント: …」行として末尾に付加）
+- [front/src/pages/AdminShiftPage.tsx] 週間サマリーを7日→18日に拡張。見出しに「横スクロール」ヒントを追加（UIはoverflow-x-autoで既対応）
+
 ## 2026-08-03（58回目）
 ### 変更内容
 - [front/src/lib/db.ts] CreateShiftRequestInput に comment? を追加。respondToShiftRequestInvite の params に userComment? を追加
