@@ -303,10 +303,15 @@ export function AdminShiftPage() {
   };
 
   const doRestore = async (log: ApprovalLog) => {
-    const res = await restoreShift(log.id);
-    if (res === 'ok') toast.show('復元しました', 'success');
-    else if (res === 'expired') toast.show('7日経過のため復元不可です', 'error');
-    else toast.show('復元に失敗しました', 'error');
+    try {
+      const res = await restoreShift(log.id);
+      if (res === 'ok') toast.show('復元しました', 'success');
+      else if (res === 'expired') toast.show('7日経過のため復元不可です', 'error');
+      else if (res === 'conflict') toast.show('競合: 別のadminが同時操作中です。画面を更新してから再試行してください', 'error');
+      else toast.show('復元に失敗しました', 'error');
+    } catch (e) {
+      toast.show(`復元エラー: ${(e as Error).message}`, 'error');
+    }
   };
 
   const memberShifts = selectedMember ? shifts.filter((s) => s.memberName === selectedMember) : [];

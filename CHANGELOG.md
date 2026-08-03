@@ -1,5 +1,42 @@
 # CHANGELOG
 
+## 2026-08-03（46回目）
+### 変更内容
+- [front/src/lib/db.ts] `subscribeApprovalLogs` に `where('createdAt', '>=', 7日前)` フィルターを追加。8日以上前のログをDB購読段階で除外し、Firestore読み取り件数を削減（課金対策）
+- [front/src/pages/AdminShiftPage.tsx] `doRestore` に try/catch を追加。楽観ロック競合時（conflict）に「競合: 別のadminが同時操作中です。画面を更新してから再試行してください」をトースト表示。その他例外もエラートーストで通知
+- [back/src/clean.js] 新規作成。Heroku Scheduler（UTC 3:00 AM / JST 12:00）で `node src/clean.js` として実行する22日自動削除スクリプト。shifts（date < 22日前）・boardPublicDeleted（deletedAt < 22日前）・boardPrivateDeleted（deletedAt < 22日前）・approvalLogs（createdAt < 22日前）を一括バッチ削除
+### デプロイ
+- GitHub (origin/main): プッシュ済み（Vercel自動デプロイ）
+- Heroku (back): プッシュ済み
+
+## 2026-08-02（45回目）
+### 変更内容
+- [front/src/pages/AdminShiftPage.tsx] シフトカードの件名表示を `memberName · subject` から `subject` のみに修正（subjectに名前が含まれているため重複していた）
+- [front/src/pages/AdminShiftPage.tsx] 並び替え時にソートキーのグループ区切り（「──8月2日──」「──場所名──」等）を挿入。日付・曜日・場所・時間・名前・人数の全ソートキーに対応
+- [front/src/pages/AdminBoardPage.tsx] 「削除済」タブを追加。削除操作はソフトデリート（boardPublicDeleted / boardPrivateDeleted コレクションへ移動）に変更。削除済タブで復元（createdAt=復元時刻）・完全削除（2重確認）が可能
+- [front/src/lib/types.ts] DeletedBoardPublic・DeletedBoardPrivate 型を追加
+- [front/src/lib/db.ts] deleteBoardPublic/deleteBoardPrivateをソフトデリートに変更。restoreBoardPublic/Private・permanentDeleteBoardPublic/Private・subscribeBoardPublicDeleted/subscribeBoardPrivateDeleted を追加
+- [front/src/lib/mockStore.ts] softDeleteBoard・restoreBoard・permanentDeleteBoard モック関数追加、boardPublicDeleted/boardPrivateDeleted ステートを追加
+- [front/src/contexts/DataContext.tsx] boardPublicDeleted・boardPrivateDeleted をコンテキストに追加（admin専用）
+- [firestore.rules] boardPublicDeleted・boardPrivateDeleted コレクションのルール追加（adminのみ読み書き）
+### デプロイ
+- GitHub (origin/main): プッシュ済み（Vercel自動デプロイ）
+- Firebase Rules: デプロイ済み
+
+## 2026-08-02（44回目）
+### 変更内容
+- [front/src/pages/AdminShiftPage.tsx] インラインプレビューのpivotDataフィルタに`status === 'confirmed'`を追加。予定シフトをプレビューから除外し、未承認シフトへの調整バッジ誤付与を防止
+- [front/src/lib/db.ts] `restoreShift`のトランザクション内に`tx.delete(logRef)`を追加。復元成功後に承認ログ自体を削除し、使用済みログの蓄積・バッジ誤表示を防止
+- [front/src/lib/mockStore.ts] モック版`restoreShift`も同様にログ削除処理を追加（`notify('approvalLogs')`含む）
+### デプロイ
+- GitHub (origin/main): プッシュ済み（Vercel自動デプロイ）
+
+## 2026-08-02（43回目）
+### 変更内容
+- [front/src/pages/AdminShiftPage.tsx] weekSummaryでtoISOString()によるUTC日付ズレを修正。addDays()（ローカル日時ベース）に置き換えることで、サマリーボタンの日付とインラインプレビューの日付表記が一致するように修正
+### デプロイ
+- GitHub (origin/main): プッシュ済み（Vercel自動デプロイ）
+
 ## 2026-08-02（42回目）
 ### 変更内容
 - [front/src/pages/AdminShiftPage.tsx] 調整マークを「名前のみ」から「日付+名前」の組み合わせキー（YYYY-MM-DD_名前）に変更。同じ名前でも別日付はマーク状態が独立

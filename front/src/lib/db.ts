@@ -293,8 +293,14 @@ export async function restoreShift(logId: string): Promise<'ok' | 'expired' | 'c
 
 export function subscribeApprovalLogs(cb: (items: ApprovalLog[]) => void): () => void {
   if (!isFirebaseConfigured) return mockStore.subscribe('approvalLogs', cb);
+  // 7日以内のログのみ購読（課金削減 + 表示制限）
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   return subscribeReal<ApprovalLog>(
-    query(collection(db!, 'approvalLogs'), orderBy('createdAt', 'desc')),
+    query(
+      collection(db!, 'approvalLogs'),
+      where('createdAt', '>=', sevenDaysAgo),
+      orderBy('createdAt', 'desc'),
+    ),
     (r) => ({
       id: r.id as string,
       shiftId: r.shiftId as string,
