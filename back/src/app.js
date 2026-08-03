@@ -110,39 +110,47 @@ app.use(cors({
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
 // グループにシフト連絡（GIDはFirestoreから動的取得）
-app.post('/line/group/shift', async (req, res) => {
-  const { message } = req.body;
-  if (!message) return res.status(400).json({ ok: false, message: 'message required' });
-  const groupId = await getGroupId();
-  if (!groupId) return res.status(400).json({ ok: false, message: 'グループIDが未設定です。グループで「グループ登録」と送信してください。' });
-  await client.pushMessage({ to: groupId, messages: [{ type: 'text', text: message }] });
-  res.json({ ok: true, message: '送信しました' });
+app.post('/line/group/shift', async (req, res, next) => {
+  try {
+    const { message } = req.body;
+    if (!message) return res.status(400).json({ ok: false, message: 'message required' });
+    const groupId = await getGroupId();
+    if (!groupId) return res.status(400).json({ ok: false, message: 'グループIDが未設定です。グループで「グループ登録」と送信してください。' });
+    await client.pushMessage({ to: groupId, messages: [{ type: 'text', text: message }] });
+    res.json({ ok: true, message: '送信しました' });
+  } catch (e) { next(e); }
 });
 
 // グループに当日ポジション配置連絡（GIDはFirestoreから動的取得）
-app.post('/line/group/position', async (req, res) => {
-  const { message } = req.body;
-  if (!message) return res.status(400).json({ ok: false, message: 'message required' });
-  const groupId = await getGroupId();
-  if (!groupId) return res.status(400).json({ ok: false, message: 'グループIDが未設定です。グループで「グループ登録」と送信してください。' });
-  await client.pushMessage({ to: groupId, messages: [{ type: 'text', text: message }] });
-  res.json({ ok: true, message: '送信しました' });
+app.post('/line/group/position', async (req, res, next) => {
+  try {
+    const { message } = req.body;
+    if (!message) return res.status(400).json({ ok: false, message: 'message required' });
+    const groupId = await getGroupId();
+    if (!groupId) return res.status(400).json({ ok: false, message: 'グループIDが未設定です。グループで「グループ登録」と送信してください。' });
+    await client.pushMessage({ to: groupId, messages: [{ type: 'text', text: message }] });
+    res.json({ ok: true, message: '送信しました' });
+  } catch (e) { next(e); }
 });
 
 // 自分への連絡
-app.post('/line/self', async (req, res) => {
-  const { message } = req.body;
-  if (!message) return res.status(400).json({ error: 'message required' });
-  await client.pushMessage({ to: SELF_USER_ID, messages: [{ type: 'text', text: message }] });
-  res.json({ ok: true, message: '送信しました' });
+app.post('/line/self', async (req, res, next) => {
+  try {
+    const { message } = req.body;
+    if (!message) return res.status(400).json({ error: 'message required' });
+    await client.pushMessage({ to: SELF_USER_ID, messages: [{ type: 'text', text: message }] });
+    res.json({ ok: true, message: '送信しました' });
+  } catch (e) { next(e); }
 });
 
 // 個別チャット連絡
-app.post('/line/dm', async (req, res) => {
-  const { lineUserId, message } = req.body;
-  if (!lineUserId || !message) return res.status(400).json({ error: 'lineUserId and message required' });
-  await client.pushMessage({ to: lineUserId, messages: [{ type: 'text', text: message }] });
-  res.json({ ok: true, message: '送信しました' });
+app.post('/line/dm', async (req, res, next) => {
+  try {
+    const { lineUserId, message } = req.body;
+    if (!lineUserId || !message) return res.status(400).json({ error: 'lineUserId and message required' });
+    await client.pushMessage({ to: lineUserId, messages: [{ type: 'text', text: message }] });
+    res.json({ ok: true, message: '送信しました' });
+  } catch (e) { next(e); }
 });
 
 // LINE Webhook受信
@@ -166,12 +174,12 @@ app.post('/line/webhook', verifyLineSignature, async (req, res) => {
 
 const WEEKDAYS_JP = ['日', '月', '火', '水', '木', '金', '土'];
 
-// テンプレ帯の時間定義（config.tsと同期。26:00=翌2:00、LAST=閉店）
+// テンプレ帯の時間定義（config.tsと同期。LAST=閉店、翌日時刻は00:00形式）
 const TEMPLATE_TIMES = {
   A: { start: '20:00', end: 'LAST' },
-  B: { start: '20:30', end: '26:00' },
+  B: { start: '20:30', end: '02:00' },
   C: { start: '21:30', end: 'LAST' },
-  D: { start: '22:00', end: '26:00' },
+  D: { start: '22:00', end: '02:00' },
 };
 
 // JST の今日 (UTC基準Dateオブジェクト)
@@ -200,13 +208,25 @@ function formatDateShort(dateStr) {
   return `${d.getUTCMonth() + 1}/${d.getUTCDate()}(${WEEKDAYS_JP[d.getUTCDay()]})`;
 }
 
+// h<9（新形式 "02:00"）または h>=24（旧形式 "26:00"）を "翌XX:XX" に変換
+function displayTime(value) {
+  if (!value || value === 'LAST') return value;
+  const parts = value.split(':');
+  if (parts.length !== 2) return value;
+  const h = parseInt(parts[0], 10);
+  if (isNaN(h)) return value;
+  if (h >= 24) return `翌${String(h - 24).padStart(2, '0')}:${parts[1]}`;
+  if (h < 9) return `翌${String(h).padStart(2, '0')}:${parts[1]}`;
+  return value;
+}
+
 function getShiftTimeLabel(shift) {
   if (shift.timeType === 'time' && shift.timeStart && shift.timeEnd) {
-    return `${shift.timeStart}〜${shift.timeEnd}`;
+    return `${displayTime(shift.timeStart)}〜${displayTime(shift.timeEnd)}`;
   }
   if (shift.timeType === 'template' && shift.template && TEMPLATE_TIMES[shift.template]) {
     const t = TEMPLATE_TIMES[shift.template];
-    return `${t.start}〜${t.end}`;
+    return `${t.start}〜${displayTime(t.end)}`;
   }
   if (shift.timeType === 'other') return 'その他';
   return '';

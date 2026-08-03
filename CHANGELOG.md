@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 2026-08-03（55回目）
+### 変更内容
+- [back/src/app.js] 全 async ルートハンドラ（/line/group/shift, /line/group/position, /line/self, /line/dm）に try-catch を追加し `next(e)` でエラーミドルウェアに渡す。LINE API エラー時に unhandledRejection → process.exit(1) → H10 クラッシュとなっていたバグを修正
+- [back/src/app.js] `TEMPLATE_TIMES` の B/D の end を "26:00" → "02:00" に更新（フロントと同期）
+- [back/src/app.js] `displayTime()` ヘルパーを追加し `getShiftTimeLabel()` で翌日時刻を "翌XX:XX" 形式で表示（LINE メッセージで "02:00" と出ていた問題を解消）
+### デプロイ
+- Heroku (back/): プッシュ済み
+
 ## 2026-08-03（54回目）
 ### 変更内容
 - [front/src/lib/utils.ts] `displayTime()` を追加。h≥24（旧形式 "26:00"→"翌02:00"）・h<9（新形式 "02:00"→"翌02:00"）の両方に対応。全ファイルで共通利用
