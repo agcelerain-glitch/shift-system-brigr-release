@@ -1211,11 +1211,47 @@ export function AdminShiftPage() {
                     </div>
                   </div>
                   <div className="space-y-2">
-                    {filteredLogs.map((log) => {
+                    {filteredLogs.flatMap((log, idx) => {
                       const expired = !isPast7Days(log.createdAt);
                       const before = log.beforeState;
                       const isMarked = before ? markedKeys.has(mkKey(before.date, before.memberName)) : false;
-                      return (
+                      const getGroupKey = (): string => {
+                        if (!before) return '—';
+                        switch (logSortKey) {
+                          case 'date':   return formatDateJP(before.date);
+                          case 'place':  return before.place ?? '場所未設定';
+                          case 'name':   return before.memberName;
+                          case 'marked': return isMarked ? '調整対象' : 'その他';
+                        }
+                      };
+                      const currentKey = getGroupKey();
+                      const prevLog = idx > 0 ? filteredLogs[idx - 1] : null;
+                      const prevKey = prevLog ? (() => {
+                        const pb = prevLog.beforeState;
+                        const pm = pb ? markedKeys.has(mkKey(pb.date, pb.memberName)) : false;
+                        if (!pb) return '—';
+                        switch (logSortKey) {
+                          case 'date':   return formatDateJP(pb.date);
+                          case 'place':  return pb.place ?? '場所未設定';
+                          case 'name':   return pb.memberName;
+                          case 'marked': return pm ? '調整対象' : 'その他';
+                        }
+                      })() : null;
+                      const showDivider = prevKey !== null && prevKey !== currentKey;
+                      return [
+                        showDivider ? (
+                          <div key={`div-${log.id}`} className="flex items-center gap-2 pt-1">
+                            <div className="flex-1 h-px bg-gray-200" />
+                            <span className="text-xs text-gray-400 font-medium px-2 shrink-0">{currentKey}</span>
+                            <div className="flex-1 h-px bg-gray-200" />
+                          </div>
+                        ) : idx === 0 ? (
+                          <div key={`div-${log.id}`} className="flex items-center gap-2 pt-1">
+                            <div className="flex-1 h-px bg-gray-200" />
+                            <span className="text-xs text-gray-400 font-medium px-2 shrink-0">{currentKey}</span>
+                            <div className="flex-1 h-px bg-gray-200" />
+                          </div>
+                        ) : null,
                         <div
                           key={log.id}
                           className={`p-3 rounded-lg border ${isMarked ? 'border-orange-200 bg-orange-50' : 'border-gray-100'}`}
@@ -1228,7 +1264,7 @@ export function AdminShiftPage() {
                               {isMarked && (
                                 <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-orange-100 text-orange-600">調整</span>
                               )}
-                              <span className="text-xs text-gray-500">{formatDateTimeJP(log.createdAt)}</span>
+                              <span className="text-xs text-gray-500 underline decoration-gray-300">{formatDateTimeJP(log.createdAt)}</span>
                             </div>
                             <Button size="sm" variant="ghost" disabled={expired} onClick={() => doRestore(log)}>
                               <RotateCcw className="w-3.5 h-3.5" />復元
@@ -1244,8 +1280,8 @@ export function AdminShiftPage() {
                             </p>
                           )}
                           {expired && <p className="text-[10px] text-gray-400 mt-1">7日経過のため復元不可</p>}
-                        </div>
-                      );
+                        </div>,
+                      ];
                     })}
                     {filteredLogs.length === 0 && (
                       <p className="text-sm text-gray-400 text-center py-3">該当するログがありません</p>

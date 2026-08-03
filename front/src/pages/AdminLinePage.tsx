@@ -72,8 +72,8 @@ export function AdminLinePage() {
   const [posPlaceCustom, setPosPlaceCustom] = useState('');
   const [posRows, setPosRows] = useState<PositionRow[]>(initPosRows);
   const [posMemo, setPosMemo] = useState('');
-  // グループ送信③: シフト連絡
-  const [shiftShareWeekOffset, setShiftShareWeekOffset] = useState(0);
+  // グループ送信②: シフト連絡
+  const [shiftShareWeekOffset, setShiftShareWeekOffset] = useState(1);
   const [shiftShareExtras, setShiftShareExtras] = useState<{ date: string; place: string; name: string }[]>([]);
   const [shiftShareExtraDate, setShiftShareExtraDate] = useState('');
   const [shiftShareExtraPlace, setShiftShareExtraPlace] = useState('');
@@ -404,14 +404,14 @@ export function AdminLinePage() {
             </div>
           </Card>
 
-          {/* グループ送信③ シフト連絡 */}
+          {/* グループ送信② シフト連絡 */}
           <Card className="p-5">
             <div className="flex items-center gap-2 mb-3">
               <div className="w-9 h-9 rounded-xl bg-teal-100 flex items-center justify-center text-teal-600">
                 <CalendarDays className="w-5 h-5" />
               </div>
               <div>
-                <h2 className="font-semibold text-gray-900">グループ送信③ シフト連絡</h2>
+                <h2 className="font-semibold text-gray-900">グループ送信② シフト連絡</h2>
                 <p className="text-xs text-gray-500">週間シフトをピボット形式でグループへ共有</p>
               </div>
             </div>
@@ -555,14 +555,14 @@ export function AdminLinePage() {
 
         </div>{/* /左列 */}
 
-        {/* 右列: グループ送信② 当日ポジション配置 */}
+        {/* 右列: グループ送信③ 当日ポジション配置 */}
         <Card className="p-5">
           <div className="flex items-center gap-2 mb-3">
             <div className="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600">
               <Users className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="font-semibold text-gray-900">グループ送信② 当日ポジション配置</h2>
+              <h2 className="font-semibold text-gray-900">グループ送信③ 当日ポジション配置</h2>
               <p className="text-xs text-gray-500">当日の配置をグループへ連絡</p>
             </div>
           </div>
@@ -636,15 +636,29 @@ export function AdminLinePage() {
 
                   {/* その他の配置名入力 */}
                   {isOther && (
-                    <input
-                      type="text"
-                      value={row.positionCustom}
-                      onChange={(e) => setPosRows((prev) => prev.map((r) =>
-                        r.id === row.id ? { ...r, positionCustom: e.target.value } : r
-                      ))}
-                      placeholder="その他の配置名を入力…"
-                      className="mb-3 w-full text-base border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
-                    />
+                    <>
+                      <input
+                        type="text"
+                        value={row.positionCustom}
+                        onChange={(e) => setPosRows((prev) => prev.map((r) =>
+                          r.id === row.id ? { ...r, positionCustom: e.target.value } : r
+                        ))}
+                        placeholder="その他の配置名を入力…"
+                        className={`mb-1.5 w-full text-base border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white ${
+                          row.selectedMembers.length > 0 && !row.positionCustom.trim()
+                            ? 'border-amber-400 focus:ring-amber-400'
+                            : 'border-gray-300'
+                        }`}
+                      />
+                      {row.selectedMembers.length > 0 && !row.positionCustom.trim() && (
+                        <p className="text-xs text-amber-600 mb-3 flex items-center gap-1">
+                          ⚠ メンバーが選択されています。配置名を入力してください。
+                        </p>
+                      )}
+                      {!(row.selectedMembers.length > 0 && !row.positionCustom.trim()) && (
+                        <div className="mb-3" />
+                      )}
+                    </>
                   )}
 
                   {/* 担当者チップ（固定メンバー＋今日の確定） */}
@@ -1025,7 +1039,7 @@ export function AdminLinePage() {
         {calSelected && <DayShiftList date={calSelected} shifts={calSelectedShifts} />}
       </Modal>
 
-      {/* グループ送信③ シフト連絡 確認ダイアログ */}
+      {/* グループ送信② シフト連絡 確認ダイアログ */}
       <Modal
         open={shiftShareConfirmOpen}
         onClose={() => setShiftShareConfirmOpen(false)}

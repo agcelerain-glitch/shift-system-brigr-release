@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 2026-08-04（62回目）
+### 変更内容
+- [front/src/pages/AdminLinePage.tsx] グループ送信番号入れ替え：旧③シフト連絡→②、旧②当日ポジション配置→③（PCレイアウト: 左列①②、右列③）
+- [front/src/pages/AdminLinePage.tsx] グループ送信②シフト連絡の初期週を来週（weekOffset=1）に変更
+- [front/src/pages/AdminLinePage.tsx] グループ送信③「その他」ポジション：メンバー選択済みで配置名が空の場合に警告表示（入力枠をアンバーに変色）
+- [front/src/pages/AdminShiftPage.tsx] 復元ログにソートキー基準の区切り線を追加（承認否認ブロックと同仕様：日付/場所/名前/調整対象でグループ分割）
+- [front/src/pages/AdminShiftPage.tsx] 承認ログの承認日時にアンダーラインを追加し視認性向上
+
 ## 2026-08-04（61回目）
 ### 変更内容
 - [front/src/pages/AdminLinePage.tsx] ポジション配置テンプレート修正：「キャシャーン」→「キャッシャー」、other1→「全体」固定、other2→「ベガ(フロント)」固定、末尾に「その他（other1）」を追加
