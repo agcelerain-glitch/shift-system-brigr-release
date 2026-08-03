@@ -36,16 +36,24 @@ function parseFirebasePrivateKey(raw) {
 }
 
 if (!admin.apps.length) {
-  const projectId = process.env.FIREBASE_PROJECT_ID;
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  const privateKey = parseFirebasePrivateKey(process.env.FIREBASE_PRIVATE_KEY);
-  if (!projectId || !clientEmail || !privateKey) {
-    console.error('[clean] 必須環境変数未設定: FIREBASE_PROJECT_ID / FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY');
-    process.exit(1);
-  }
   try {
-    admin.initializeApp({ credential: admin.credential.cert({ projectId, clientEmail, privateKey }) });
-    console.log('[clean] Firebase Admin 初期化成功');
+    if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+      // ローカル実行用: JSONファイルパスを環境変数に設定すれば秘密鍵の貼り付けが不要
+      admin.initializeApp();
+      console.log('[clean] Firebase Admin 初期化成功 (GOOGLE_APPLICATION_CREDENTIALS)');
+    } else {
+      // Heroku 本番用: 個別環境変数から初期化
+      const projectId = process.env.FIREBASE_PROJECT_ID;
+      const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+      const privateKey = parseFirebasePrivateKey(process.env.FIREBASE_PRIVATE_KEY);
+      if (!projectId || !clientEmail || !privateKey) {
+        console.error('[clean] 必須環境変数未設定: FIREBASE_PROJECT_ID / FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY');
+        console.error('[clean] ローカル実行の場合は GOOGLE_APPLICATION_CREDENTIALS にJSONファイルパスを設定してください');
+        process.exit(1);
+      }
+      admin.initializeApp({ credential: admin.credential.cert({ projectId, clientEmail, privateKey }) });
+      console.log('[clean] Firebase Admin 初期化成功 (env vars)');
+    }
   } catch (e) {
     console.error('[clean] Firebase Admin 初期化失敗:', e?.message ?? e);
     process.exit(1);
