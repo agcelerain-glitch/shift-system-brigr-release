@@ -222,9 +222,17 @@ async function main() {
     const allDoneMsg = `[シフトリマインド]\n来週 ${label} は全員提出済みです ✅`;
     const allDoneResults = await notifyAdmins(lineClient, adminList, allDoneMsg);
     const allDoneOk = allDoneResults.filter((r) => r.ok).length;
-    await notifyDeveloper(lineClient,
-      `[開発者通知] リマインドジョブ完了\n${label}\n\n✅ 全員提出済み\n\n管理者通知: ${allDoneOk}/${adminList.length}件成功\n${allDoneResults.map((r) => `${r.ok ? '✅' : '❌'} ${r.name}`).join('\n')}`
-    );
+    await notifyDeveloper(lineClient, [
+      `[開発者通知] リマインドジョブ完了`,
+      `${label}`,
+      '',
+      `▼ 未提出メンバーへのリマインド`,
+      `・全員提出済み — 送信なし`,
+      '',
+      `▼ 管理者へのサマリー送信`,
+      `${allDoneOk}/${adminList.length}件成功`,
+      ...allDoneResults.map((r) => `${r.ok ? '✅' : '❌'} ${r.name}`),
+    ].join('\n'));
     return;
   }
 
@@ -276,10 +284,14 @@ async function main() {
     `[開発者通知] リマインドジョブ完了`,
     `${label}`,
     '',
-    `管理者通知: ${notifyOk}/${adminList.length}件成功`,
-    ...notifyResults.map((r) => `${r.ok ? '✅' : '❌'} ${r.name}`),
+    `▼ 未提出メンバーへのリマインド（${unsubmitted.length}名）`,
+    `・LINE通知済: ${DRY_RUN ? '(dry)' : `${sentCount}件`}`,
+    `・LINE未登録（手動連絡要）: ${withoutLine.length}名`,
+    ...(withoutLine.length > 0 ? withoutLine.map((m) => `  ⚠️ ${m.name}`) : []),
     '',
-    `未提出: ${unsubmitted.length}名 / LINE送信: ${DRY_RUN ? '(dry)' : `${sentCount}件`} / LINE未登録: ${withoutLine.length}名`,
+    `▼ 管理者へのサマリー送信`,
+    `${notifyOk}/${adminList.length}件成功`,
+    ...notifyResults.map((r) => `${r.ok ? '✅' : '❌'} ${r.name}`),
   ];
   await notifyDeveloper(lineClient, devParts.join('\n'));
 
