@@ -7,13 +7,19 @@
  *   頻度: Daily / 11:00 PM UTC（= JST 翌朝 8:00）
  *   ※ スクリプト内で金曜日 JST かどうかを確認し、金曜以外はスキップ
  *
+ * 管理者通知先の管理（環境変数不要）:
+ *   Firestore の config/notify ドキュメントの adminLineIds 配列で管理
+ *   初回実行時に LINE_SELF_USER_ID を自動登録
+ *   追加/削除は Firebase コンソールまたは AdminLinePage から変更可能
+ *
  * ロジック:
  *   1. JST で今日が金曜でなければ即終了（--force で強制実行）
  *   2. 来週（月〜日）の日付範囲を計算
- *   3. members コレクションから全メンバーを取得
- *   4. shifts コレクションから来週のシフトを取得
- *   5. 申請0件のメンバーを特定し LINE 個別通知
- *   6. LINE_SELF_USER_ID に送信サマリーを通知
+ *   3. config/notify から管理者LINE IDリストを取得（初回は自動初期化）
+ *   4. members コレクションから全メンバーを取得
+ *   5. shifts コレクションから来週のシフトを取得（ステータス問わず）
+ *   6. 申請0件のメンバーを特定し LINE 個別通知
+ *   7. 管理者全員にサマリーを通知
  *
  * オプション:
  *   --dry-run  : LINE 送信せず対象者のみ表示
@@ -67,7 +73,6 @@ const db = admin.firestore();
 
 // ─── 日付ユーティリティ ──────────────────────────────────
 
-// JST の今日を UTC ゼロ時刻の Date で返す
 function todayJST() {
   const now = new Date(Date.now() + 9 * 3600 * 1000);
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
@@ -82,11 +87,9 @@ function formatDateShort(dateStr) {
   return `${d.getUTCMonth() + 1}/${d.getUTCDate()}(${WEEKDAYS_JP[d.getUTCDay()]})`;
 }
 
-// 来週の月〜日（JST 基準）
 function getNextWeekRange() {
   const today = todayJST();
-  const dow = today.getUTCDay(); // 0=日, 5=金
-  // 今日から次の月曜までの日数（月曜なら7日後の月曜を指す）
+  const dow = today.getUTCDay();
   const daysToMonday = (8 - dow) % 7 || 7;
   const monday = new Date(today);
   monday.setUTCDate(today.getUTCDate() + daysToMonday);
@@ -94,11 +97,41 @@ function getNextWeekRange() {
   sunday.setUTCDate(monday.getUTCDate() + 6);
   const start = toDateStr(monday);
   const end = toDateStr(sunday);
-  return {
-    start,
-    end,
-    label: `${formatDateShort(start)}〜${formatDateShort(end)}`,
-  };
+  return { start, end, label: `${formatDateShort(start)}〜${formatDateShort(end)}` };
+}
+
+// ─── 管理者通知先リスト（Firestoreから取得） ─────────────
+
+/**
+ * config/notify.adminLineIds から管理者LINE IDを取得する。
+ * ドキュメントが存在しない場合は LINE_SELF_USER_ID で自動初期化。
+ * Firestore コンソールで adminLineIds 配列を編集することで管理者を追加/削除できる。
+ */
+async function getAdminNotifyIds() {
+  const selfId = process.env.LINE_SELF_USER_ID ?? null;
+  const configRef = db.collection('config').doc('notify');
+
+  try {
+    const snap = await configRef.get();
+
+    if (!snap.exists) {
+      // 初回: LINE_SELF_USER_ID を初期値として登録
+      const initial = selfId ? [selfId] : [];
+      await configRef.set({
+        adminLineIds: initial,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      console.log(`[remind] config/notify を初期化 (adminLineIds: ${initial.length}件)`);
+      return initial;
+    }
+
+    const ids = (snap.data()?.adminLineIds ?? []).filter(Boolean);
+    console.log(`[remind] 管理者通知先: ${ids.length}件 (config/notify)`);
+    return ids;
+  } catch (e) {
+    console.warn('[remind] config/notify 読み取り失敗、フォールバック:', e?.message);
+    return selfId ? [selfId] : [];
+  }
 }
 
 // ─── LINE ヘルパー ────────────────────────────────────────
@@ -120,6 +153,14 @@ async function pushLine(client, to, text) {
   }
 }
 
+// 管理者全員にサマリーを送信
+async function notifyAdmins(client, adminIds, text) {
+  if (DRY_RUN || adminIds.length === 0) return;
+  const results = await Promise.allSettled(adminIds.map((id) => pushLine(client, id, text)));
+  const ok = results.filter((r) => r.status === 'fulfilled' && r.value).length;
+  console.log(`[remind] 管理者サマリー送信: ${ok}/${adminIds.length}件成功`);
+}
+
 // ─── メイン ──────────────────────────────────────────────
 
 async function main() {
@@ -137,7 +178,12 @@ async function main() {
   console.log(`[remind] ${mode}開始 — 来週 ${label} のシフト未提出者を確認`);
 
   const lineClient = getLineClient();
-  const selfId = process.env.LINE_SELF_USER_ID;
+
+  // 管理者通知先を Firestore から取得
+  const adminIds = await getAdminNotifyIds();
+  if (adminIds.length === 0) {
+    console.warn('[remind] 管理者通知先が設定されていません (config/notify.adminLineIds が空)');
+  }
 
   // 1. 全メンバー取得
   const membersSnap = await db.collection('members').get();
@@ -161,9 +207,7 @@ async function main() {
 
   if (unsubmitted.length === 0) {
     console.log('[remind] 全員提出済み — リマインド不要');
-    if (!DRY_RUN) {
-      await pushLine(lineClient, selfId, `[シフトリマインド]\n来週 ${label} は全員提出済みです ✅`);
-    }
+    await notifyAdmins(lineClient, adminIds, `[シフトリマインド]\n来週 ${label} は全員提出済みです ✅`);
     return;
   }
 
@@ -172,14 +216,13 @@ async function main() {
   const withoutLine = unsubmitted.filter((m) => !m.lineUserId);
   console.log(`[remind] 未提出 ${unsubmitted.length}名（LINE有: ${withLine.length}名 / LINE未登録: ${withoutLine.length}名）`);
 
-  // 4. LINE 個別通知
+  // 4. 未提出メンバーへ LINE 個別通知
   const reminderText = `来週（${label}）のシフトがまだ提出されていません。\n\nお手数ですが取り急ぎ提出をお願いします。`;
   let sentCount = 0;
 
   if (DRY_RUN) {
     console.log(`[remind][DRY-RUN] 通知予定: ${withLine.map((m) => m.name).join('・')}`);
   } else {
-    // 5件ずつ並列送信（レート制限対策）
     for (let i = 0; i < withLine.length; i += 5) {
       const chunk = withLine.slice(i, i + 5);
       const results = await Promise.allSettled(
@@ -187,12 +230,8 @@ async function main() {
       );
       results.forEach((r, idx) => {
         const name = chunk[idx].name;
-        if (r.status === 'fulfilled' && r.value) {
-          sentCount++;
-          console.log(`[remind] 送信OK: ${name}`);
-        } else {
-          console.error(`[remind] 送信NG: ${name}`);
-        }
+        if (r.status === 'fulfilled' && r.value) { sentCount++; console.log(`[remind] 送信OK: ${name}`); }
+        else { console.error(`[remind] 送信NG: ${name}`); }
       });
     }
   }
@@ -201,7 +240,7 @@ async function main() {
     console.log(`[remind] LINE未登録（通知不可）: ${withoutLine.map((m) => m.name).join('・')}`);
   }
 
-  // 5. 管理者サマリー通知
+  // 5. 管理者全員にサマリーを通知
   const summaryParts = [
     `[シフトリマインド${DRY_RUN ? '(DRY-RUN)' : '送信完了'}]`,
     `来週 ${label}`,
@@ -212,18 +251,14 @@ async function main() {
   ];
   const summary = summaryParts.join('\n');
   console.log(`[remind] 管理者サマリー:\n${summary}`);
+  await notifyAdmins(lineClient, adminIds, summary);
 
-  if (!DRY_RUN) {
-    await pushLine(lineClient, selfId, summary);
-  }
-
-  console.log(`[remind] ${mode}完了 — LINE送信${DRY_RUN ? '(dry)' : `${sentCount}件`} / LINE未登録${withoutLine.length}名`);
+  console.log(`[remind] ${mode}完了 — LINE送信${DRY_RUN ? '(dry)' : `${sentCount}件`} / 管理者通知${adminIds.length}件 / LINE未登録${withoutLine.length}名`);
 }
 
 main().catch(async (e) => {
   const msg = e?.message ?? String(e);
   console.error('[remind] 予期しないエラー:', msg);
-  // 初期化済みなら LINE でエラー通知
   const token = process.env.CHANNEL_ACCESS_TOKEN;
   const selfId = process.env.LINE_SELF_USER_ID;
   if (token && selfId) {

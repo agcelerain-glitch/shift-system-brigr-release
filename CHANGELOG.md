@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 2026-08-03（49回目）
+### 変更内容
+- [back/src/remind.js] 管理者通知先を `LINE_SELF_USER_ID` 環境変数から Firestore `config/notify.adminLineIds` 配列に移行。初回実行時に `LINE_SELF_USER_ID` で自動初期化。複数管理者対応。`notifyAdmins()` で全管理者に一括送信
+### 初期設定
+- Firebase コンソール → Firestore → config/notify → adminLineIds 配列に管理者の LINE User ID を追加
+### デプロイ
+- GitHub (origin/main): プッシュ済み
+- Heroku (back): プッシュ必要
+
 ## 2026-08-03（48回目）
 ### 変更内容
 - [back/src/remind.js] 新規作成。毎週金曜 JST 8:00（UTC 23:00）に来週（月〜日）のシフト未提出メンバーへ LINE 個別通知。LINE 未登録者は管理者サマリーに ⚠️ 表示。全員提出済み時も管理者へ通知。`--dry-run` / `--force` オプション対応
