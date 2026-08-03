@@ -650,6 +650,90 @@ export function AdminShiftPage() {
                   </div>
                 </div>
               ))}
+              {/* 別の場所・時間帯で出勤依頼を追加（確定シフトがある場合も使用可） */}
+              {(() => {
+                const freeKey = `${summarySelectedDate}_新規依頼_`;
+                const isAdding = addingRequestKey === freeKey;
+                return isAdding ? (
+                  <div className="border border-purple-200 rounded-xl p-3 bg-purple-50 space-y-3 mt-2">
+                    <p className="text-xs font-semibold text-purple-700 flex items-center gap-1.5">
+                      <BellPlus className="w-3.5 h-3.5" />出勤依頼の追加（場所・時間帯を指定）
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">場所</label>
+                        <Select id="req-place-extra" defaultValue="" className="text-sm">
+                          <option value="">選択</option>
+                          {PLACE_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
+                        </Select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">時間帯</label>
+                        <Select id="req-time-extra" defaultValue="A" className="text-sm">
+                          {(['A', 'B', 'C', 'D'] as TemplateCode[]).map(t => (
+                            <option key={t} value={t}>{TEMPLATE_LABELS[t]}</option>
+                          ))}
+                          <option value="__custom__">時間指定</option>
+                        </Select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">必要人数</label>
+                      <div className="flex items-center gap-2">
+                        <button type="button" onClick={() => setDraftRequiredCount(c => Math.max(1, c - 1))} className="w-7 h-7 rounded-full bg-white border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100">-</button>
+                        <span className="text-sm font-bold w-8 text-center">{draftRequiredCount}</span>
+                        <button type="button" onClick={() => setDraftRequiredCount(c => c + 1)} className="w-7 h-7 rounded-full bg-white border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100">+</button>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 justify-end">
+                      <Button size="sm" variant="ghost" onClick={() => { setAddingRequestKey(null); setDraftRequiredCount(1); }}>キャンセル</Button>
+                      <Button
+                        size="sm"
+                        variant="success"
+                        disabled={savingRequest}
+                        onClick={async () => {
+                          const placeEl = document.getElementById('req-place-extra') as HTMLSelectElement;
+                          const timeEl = document.getElementById('req-time-extra') as HTMLSelectElement;
+                          const place = placeEl?.value;
+                          const timeVal = timeEl?.value;
+                          if (!place) { toast.show('場所を選択してください', 'error'); return; }
+                          const isTemplate = timeVal !== '__custom__';
+                          const tCode = isTemplate ? timeVal as TemplateCode : undefined;
+                          const tLabel = isTemplate ? TEMPLATE_LABELS[tCode!] : '時間指定';
+                          const key = `${summarySelectedDate}_${place}_${tLabel}`;
+                          if (requestDrafts.some(d => d.key === key)) { toast.show('同じ依頼が既に追加されています', 'error'); return; }
+                          setSavingRequest(true);
+                          try {
+                            await createShiftRequest({
+                              date: summarySelectedDate!,
+                              place,
+                              timeType: isTemplate ? 'template' : 'time',
+                              template: tCode,
+                              timeLabel: tLabel,
+                              requiredCount: draftRequiredCount,
+                              createdBy: adminName,
+                            });
+                            setRequestDrafts(prev => [...prev, { key, date: summarySelectedDate!, place, timeType: isTemplate ? 'template' : 'time', template: tCode, timeLabel: tLabel, requiredCount: draftRequiredCount }]);
+                            setAddingRequestKey(null);
+                            setDraftRequiredCount(1);
+                            toast.show('出勤依頼を追加しました（LINE操作ページから送信できます）', 'success');
+                          } catch (e) { toast.show(`追加失敗: ${(e as Error).message}`, 'error'); }
+                          finally { setSavingRequest(false); }
+                        }}
+                      >
+                        <BellPlus className="w-3.5 h-3.5" />追加
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => { setAddingRequestKey(freeKey); setDraftRequiredCount(1); }}
+                    className="flex items-center gap-1.5 text-xs text-purple-600 hover:text-purple-800 font-medium px-3 py-2 border border-dashed border-purple-300 rounded-lg hover:bg-purple-50 transition-all mt-2 w-full justify-center"
+                  >
+                    <BellPlus className="w-3.5 h-3.5" />別の場所・時間帯で出勤依頼を追加
+                  </button>
+                );
+              })()}
               <div className="flex items-center justify-between mt-1 px-1">
                 <p className="text-[10px] text-gray-400">名前をタップすると調整マークが付きます（復元ログにも反映）</p>
                 {requestDrafts.length > 0 && (
