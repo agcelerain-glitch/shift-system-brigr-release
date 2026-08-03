@@ -36,6 +36,23 @@ const saveMemberLastPlace = (memberName: string, place: string) => {
   } catch {}
 };
 
+// 出勤依頼フォーム用の時間選択肢（9:00〜翌8:45、15分刻み）
+const REQUEST_TIME_OPTIONS: string[] = [];
+for (let h = 9; h < 24; h++) {
+  for (const m of [0, 15, 30, 45]) {
+    REQUEST_TIME_OPTIONS.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+  }
+}
+for (let h = 0; h <= 8; h++) {
+  for (const m of [0, 15, 30, 45]) {
+    REQUEST_TIME_OPTIONS.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+  }
+}
+const toReqMinutes = (t: string): number => {
+  const [h, m] = t.split(':').map(Number);
+  return (h < 9 ? h + 24 : h) * 60 + m;
+};
+
 function timeLabelOf(s: Shift): string {
   if (s.timeType === 'template' && s.template) return TEMPLATE_LABELS[s.template];
   if (s.timeType === 'time') return `${displayTime(s.timeStart)}〜${displayTime(s.timeEnd)}`;
@@ -109,9 +126,67 @@ export function AdminShiftPage() {
     requiredCount: number;
   };
   const [requestDrafts, setRequestDrafts] = useState<RequestDraft[]>([]);
-  const [addingRequestKey, setAddingRequestKey] = useState<string | null>(null); // どのセルで追加フォームを開いているか
+  const [addingRequestKey, setAddingRequestKey] = useState<string | null>(null);
   const [draftRequiredCount, setDraftRequiredCount] = useState(1);
   const [savingRequest, setSavingRequest] = useState(false);
+  const [draftPlace, setDraftPlace] = useState('');
+  const [draftTimeVal, setDraftTimeVal] = useState('A');
+  const [draftTimeStart, setDraftTimeStart] = useState('20:00');
+  const [draftTimeEnd, setDraftTimeEnd] = useState('02:00');
+  const [draftComment, setDraftComment] = useState('');
+
+  const resetDraftForm = () => {
+    setAddingRequestKey(null);
+    setDraftRequiredCount(1);
+    setDraftPlace('');
+    setDraftTimeVal('A');
+    setDraftTimeStart('20:00');
+    setDraftTimeEnd('02:00');
+    setDraftComment('');
+  };
+
+  const saveRequest = async (
+    place: string,
+    timeLabel: string,
+    timeType: 'template' | 'time',
+    template?: TemplateCode,
+    timeStart?: string,
+    timeEnd?: string,
+  ) => {
+    const key = `${summarySelectedDate}_${place}_${timeLabel}`;
+    if (requestDrafts.some(d => d.key === key)) { toast.show('同じ依頼が既に追加されています', 'error'); return; }
+    setSavingRequest(true);
+    try {
+      await createShiftRequest({
+        date: summarySelectedDate!,
+        place,
+        timeType,
+        template,
+        timeStart,
+        timeEnd,
+        timeLabel,
+        requiredCount: draftRequiredCount,
+        createdBy: adminName,
+        comment: draftComment || undefined,
+      });
+      setRequestDrafts(prev => [...prev, { key, date: summarySelectedDate!, place, timeType, template, timeStart, timeEnd, timeLabel, requiredCount: draftRequiredCount }]);
+      resetDraftForm();
+      toast.show('出勤依頼を追加しました（LINE操作ページから送信できます）', 'success');
+    } catch (e) { toast.show(`追加失敗: ${(e as Error).message}`, 'error'); }
+    finally { setSavingRequest(false); }
+  };
+
+  const handleSaveFreeRequest = async () => {
+    if (!draftPlace) { toast.show('場所を選択してください', 'error'); return; }
+    const isTemplate = draftTimeVal !== '__custom__';
+    const tCode = isTemplate ? draftTimeVal as TemplateCode : undefined;
+    const tLabel = isTemplate ? TEMPLATE_LABELS[tCode!] : `${displayTime(draftTimeStart)}〜${displayTime(draftTimeEnd)}`;
+    if (!isTemplate && toReqMinutes(draftTimeStart) >= toReqMinutes(draftTimeEnd)) {
+      toast.show('終了は開始より後にしてください', 'error');
+      return;
+    }
+    await saveRequest(draftPlace, tLabel, isTemplate ? 'template' : 'time', tCode, !isTemplate ? draftTimeStart : undefined, !isTemplate ? draftTimeEnd : undefined);
+  };
 
   // 承認時の場所指定モーダル
   const [approvingShift, setApprovingShift] = useState<Shift | null>(null);
@@ -463,14 +538,14 @@ export function AdminShiftPage() {
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label className="block text-xs font-medium text-gray-600 mb-1">場所</label>
-                        <Select id="req-place-new" defaultValue="" className="text-sm">
+                        <Select value={draftPlace} onChange={e => setDraftPlace(e.target.value)} className="text-sm">
                           <option value="">選択</option>
                           {PLACE_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
                         </Select>
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-gray-600 mb-1">時間帯</label>
-                        <Select id="req-time-new" defaultValue="A" className="text-sm">
+                        <Select value={draftTimeVal} onChange={e => setDraftTimeVal(e.target.value)} className="text-sm">
                           {(['A', 'B', 'C', 'D'] as TemplateCode[]).map(t => (
                             <option key={t} value={t}>{TEMPLATE_LABELS[t]}</option>
                           ))}
@@ -478,6 +553,27 @@ export function AdminShiftPage() {
                         </Select>
                       </div>
                     </div>
+                    {draftTimeVal === '__custom__' && (
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">開始</label>
+                          <Select value={draftTimeStart} onChange={e => setDraftTimeStart(e.target.value)} className="text-sm">
+                            {REQUEST_TIME_OPTIONS.map(t => <option key={t} value={t}>{displayTime(t)}</option>)}
+                          </Select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">終了</label>
+                          <Select value={draftTimeEnd} onChange={e => setDraftTimeEnd(e.target.value)} className="text-sm">
+                            {REQUEST_TIME_OPTIONS.map(t => <option key={t} value={t}>{displayTime(t)}</option>)}
+                          </Select>
+                        </div>
+                        {toReqMinutes(draftTimeStart) >= toReqMinutes(draftTimeEnd) && (
+                          <p className="col-span-2 text-xs text-amber-600 flex items-center gap-1">
+                            <AlertTriangle className="w-3.5 h-3.5" />終了は開始より後にしてください
+                          </p>
+                        )}
+                      </div>
+                    )}
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1">必要人数</label>
                       <div className="flex items-center gap-2">
@@ -486,49 +582,20 @@ export function AdminShiftPage() {
                         <button type="button" onClick={() => setDraftRequiredCount(c => c + 1)} className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 hover:bg-gray-300">+</button>
                       </div>
                     </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">コメント（任意）</label>
+                      <Input value={draftComment} onChange={e => setDraftComment(e.target.value)} placeholder="依頼内容や備考…" />
+                    </div>
                     <div className="flex gap-2 justify-end">
-                      <Button size="sm" variant="ghost" onClick={() => { setAddingRequestKey(null); setDraftRequiredCount(1); }}>キャンセル</Button>
-                      <Button
-                        size="sm"
-                        variant="success"
-                        disabled={savingRequest}
-                        onClick={async () => {
-                          const placeEl = document.getElementById('req-place-new') as HTMLSelectElement;
-                          const timeEl = document.getElementById('req-time-new') as HTMLSelectElement;
-                          const place = placeEl?.value;
-                          const timeVal = timeEl?.value;
-                          if (!place) { toast.show('場所を選択してください', 'error'); return; }
-                          const isTemplate = timeVal !== '__custom__';
-                          const tCode = isTemplate ? timeVal as TemplateCode : undefined;
-                          const tLabel = isTemplate ? TEMPLATE_LABELS[tCode!] : '時間指定';
-                          const key = `${summarySelectedDate}_${place}_${tLabel}`;
-                          if (requestDrafts.some(d => d.key === key)) { toast.show('同じ依頼が既に追加されています', 'error'); return; }
-                          setSavingRequest(true);
-                          try {
-                            await createShiftRequest({
-                              date: summarySelectedDate!,
-                              place,
-                              timeType: isTemplate ? 'template' : 'time',
-                              template: tCode,
-                              timeLabel: tLabel,
-                              requiredCount: draftRequiredCount,
-                              createdBy: adminName,
-                            });
-                            setRequestDrafts(prev => [...prev, { key, date: summarySelectedDate!, place, timeType: isTemplate ? 'template' : 'time', template: tCode, timeLabel: tLabel, requiredCount: draftRequiredCount }]);
-                            setAddingRequestKey(null);
-                            setDraftRequiredCount(1);
-                            toast.show('出勤依頼を追加しました（LINE操作ページから送信できます）', 'success');
-                          } catch (e) { toast.show(`追加失敗: ${(e as Error).message}`, 'error'); }
-                          finally { setSavingRequest(false); }
-                        }}
-                      >
+                      <Button size="sm" variant="ghost" onClick={resetDraftForm}>キャンセル</Button>
+                      <Button size="sm" variant="success" disabled={savingRequest} onClick={handleSaveFreeRequest}>
                         <BellPlus className="w-3.5 h-3.5" />追加
                       </Button>
                     </div>
                   </div>
                 ) : (
                   <button
-                    onClick={() => { setAddingRequestKey(noShiftKey); setDraftRequiredCount(1); }}
+                    onClick={() => { resetDraftForm(); setAddingRequestKey(noShiftKey); }}
                     className="flex items-center gap-1.5 text-xs text-purple-600 hover:text-purple-800 font-medium px-3 py-2 border border-dashed border-purple-300 rounded-lg hover:bg-purple-50 transition-all"
                   >
                     <BellPlus className="w-3.5 h-3.5" />この日に出勤依頼を追加
@@ -598,8 +665,8 @@ export function AdminShiftPage() {
                           </div>
                           {/* 依頼追加フォーム（インライン） */}
                           {isAdding && (
-                            <div className="mt-2 border border-purple-200 rounded-xl p-3 bg-purple-50">
-                              <p className="text-xs font-semibold text-purple-700 mb-2">必要人数を設定</p>
+                            <div className="mt-2 border border-purple-200 rounded-xl p-3 bg-purple-50 space-y-2">
+                              <p className="text-xs font-semibold text-purple-700">必要人数・コメントを設定</p>
                               <div className="flex items-center gap-3">
                                 <div className="flex items-center gap-2">
                                   <button type="button" onClick={() => setDraftRequiredCount(c => Math.max(1, c - 1))} className="w-7 h-7 rounded-full bg-white border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100">-</button>
@@ -608,40 +675,24 @@ export function AdminShiftPage() {
                                   <span className="text-xs text-gray-500">人</span>
                                 </div>
                                 <div className="flex gap-1.5 ml-auto">
-                                  <Button size="sm" variant="ghost" onClick={() => { setAddingRequestKey(null); setDraftRequiredCount(1); }}>取消</Button>
+                                  <Button size="sm" variant="ghost" onClick={resetDraftForm}>取消</Button>
                                   <Button
                                     size="sm"
                                     variant="success"
                                     disabled={savingRequest}
                                     onClick={async () => {
-                                      const place = group.place;
                                       const tLabel = tg.label;
                                       const templateEntry = Object.entries(TEMPLATE_LABELS).find(([, v]) => v === tLabel);
                                       const isTemplate = !!templateEntry;
                                       const tCode = isTemplate ? templateEntry![0] as TemplateCode : undefined;
-                                      setSavingRequest(true);
-                                      try {
-                                        await createShiftRequest({
-                                          date: summarySelectedDate!,
-                                          place,
-                                          timeType: isTemplate ? 'template' : 'time',
-                                          template: tCode,
-                                          timeLabel: tLabel,
-                                          requiredCount: draftRequiredCount,
-                                          createdBy: adminName,
-                                        });
-                                        setRequestDrafts(prev => [...prev, { key: cellKey, date: summarySelectedDate!, place, timeType: isTemplate ? 'template' : 'time', template: tCode, timeLabel: tLabel, requiredCount: draftRequiredCount }]);
-                                        setAddingRequestKey(null);
-                                        setDraftRequiredCount(1);
-                                        toast.show('出勤依頼を追加しました（LINE操作ページから送信できます）', 'success');
-                                      } catch (e) { toast.show(`追加失敗: ${(e as Error).message}`, 'error'); }
-                                      finally { setSavingRequest(false); }
+                                      await saveRequest(group.place, tLabel, isTemplate ? 'template' : 'time', tCode);
                                     }}
                                   >
                                     <BellPlus className="w-3.5 h-3.5" />追加
                                   </Button>
                                 </div>
                               </div>
+                              <Input value={draftComment} onChange={e => setDraftComment(e.target.value)} placeholder="コメント（任意）" />
                             </div>
                           )}
                         </div>
@@ -662,14 +713,14 @@ export function AdminShiftPage() {
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label className="block text-xs font-medium text-gray-600 mb-1">場所</label>
-                        <Select id="req-place-extra" defaultValue="" className="text-sm">
+                        <Select value={draftPlace} onChange={e => setDraftPlace(e.target.value)} className="text-sm">
                           <option value="">選択</option>
                           {PLACE_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
                         </Select>
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-gray-600 mb-1">時間帯</label>
-                        <Select id="req-time-extra" defaultValue="A" className="text-sm">
+                        <Select value={draftTimeVal} onChange={e => setDraftTimeVal(e.target.value)} className="text-sm">
                           {(['A', 'B', 'C', 'D'] as TemplateCode[]).map(t => (
                             <option key={t} value={t}>{TEMPLATE_LABELS[t]}</option>
                           ))}
@@ -677,6 +728,27 @@ export function AdminShiftPage() {
                         </Select>
                       </div>
                     </div>
+                    {draftTimeVal === '__custom__' && (
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">開始</label>
+                          <Select value={draftTimeStart} onChange={e => setDraftTimeStart(e.target.value)} className="text-sm">
+                            {REQUEST_TIME_OPTIONS.map(t => <option key={t} value={t}>{displayTime(t)}</option>)}
+                          </Select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">終了</label>
+                          <Select value={draftTimeEnd} onChange={e => setDraftTimeEnd(e.target.value)} className="text-sm">
+                            {REQUEST_TIME_OPTIONS.map(t => <option key={t} value={t}>{displayTime(t)}</option>)}
+                          </Select>
+                        </div>
+                        {toReqMinutes(draftTimeStart) >= toReqMinutes(draftTimeEnd) && (
+                          <p className="col-span-2 text-xs text-amber-600 flex items-center gap-1">
+                            <AlertTriangle className="w-3.5 h-3.5" />終了は開始より後にしてください
+                          </p>
+                        )}
+                      </div>
+                    )}
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1">必要人数</label>
                       <div className="flex items-center gap-2">
@@ -685,49 +757,20 @@ export function AdminShiftPage() {
                         <button type="button" onClick={() => setDraftRequiredCount(c => c + 1)} className="w-7 h-7 rounded-full bg-white border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100">+</button>
                       </div>
                     </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">コメント（任意）</label>
+                      <Input value={draftComment} onChange={e => setDraftComment(e.target.value)} placeholder="依頼内容や備考…" />
+                    </div>
                     <div className="flex gap-2 justify-end">
-                      <Button size="sm" variant="ghost" onClick={() => { setAddingRequestKey(null); setDraftRequiredCount(1); }}>キャンセル</Button>
-                      <Button
-                        size="sm"
-                        variant="success"
-                        disabled={savingRequest}
-                        onClick={async () => {
-                          const placeEl = document.getElementById('req-place-extra') as HTMLSelectElement;
-                          const timeEl = document.getElementById('req-time-extra') as HTMLSelectElement;
-                          const place = placeEl?.value;
-                          const timeVal = timeEl?.value;
-                          if (!place) { toast.show('場所を選択してください', 'error'); return; }
-                          const isTemplate = timeVal !== '__custom__';
-                          const tCode = isTemplate ? timeVal as TemplateCode : undefined;
-                          const tLabel = isTemplate ? TEMPLATE_LABELS[tCode!] : '時間指定';
-                          const key = `${summarySelectedDate}_${place}_${tLabel}`;
-                          if (requestDrafts.some(d => d.key === key)) { toast.show('同じ依頼が既に追加されています', 'error'); return; }
-                          setSavingRequest(true);
-                          try {
-                            await createShiftRequest({
-                              date: summarySelectedDate!,
-                              place,
-                              timeType: isTemplate ? 'template' : 'time',
-                              template: tCode,
-                              timeLabel: tLabel,
-                              requiredCount: draftRequiredCount,
-                              createdBy: adminName,
-                            });
-                            setRequestDrafts(prev => [...prev, { key, date: summarySelectedDate!, place, timeType: isTemplate ? 'template' : 'time', template: tCode, timeLabel: tLabel, requiredCount: draftRequiredCount }]);
-                            setAddingRequestKey(null);
-                            setDraftRequiredCount(1);
-                            toast.show('出勤依頼を追加しました（LINE操作ページから送信できます）', 'success');
-                          } catch (e) { toast.show(`追加失敗: ${(e as Error).message}`, 'error'); }
-                          finally { setSavingRequest(false); }
-                        }}
-                      >
+                      <Button size="sm" variant="ghost" onClick={resetDraftForm}>キャンセル</Button>
+                      <Button size="sm" variant="success" disabled={savingRequest} onClick={handleSaveFreeRequest}>
                         <BellPlus className="w-3.5 h-3.5" />追加
                       </Button>
                     </div>
                   </div>
                 ) : (
                   <button
-                    onClick={() => { setAddingRequestKey(freeKey); setDraftRequiredCount(1); }}
+                    onClick={() => { resetDraftForm(); setAddingRequestKey(freeKey); }}
                     className="flex items-center gap-1.5 text-xs text-purple-600 hover:text-purple-800 font-medium px-3 py-2 border border-dashed border-purple-300 rounded-lg hover:bg-purple-50 transition-all mt-2 w-full justify-center"
                   >
                     <BellPlus className="w-3.5 h-3.5" />別の場所・時間帯で出勤依頼を追加

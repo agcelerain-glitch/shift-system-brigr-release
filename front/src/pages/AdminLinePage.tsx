@@ -244,9 +244,9 @@ export function AdminLinePage() {
         )}
       </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 lg:grid-rows-[auto_1fr] gap-4">
         {/* グループ送信: シフト連絡 */}
-        <Card className="p-5">
+        <Card className="p-5 lg:col-start-1 lg:row-start-1">
           <div className="flex items-center gap-2 mb-3">
             <div className="w-9 h-9 rounded-xl bg-green-100 flex items-center justify-center text-green-600">
               <Megaphone className="w-5 h-5" />
@@ -276,7 +276,7 @@ export function AdminLinePage() {
         </Card>
 
         {/* 当日ポジション配置連絡 */}
-        <Card className="p-5">
+        <Card className="p-5 lg:col-start-2 lg:row-start-1 lg:row-span-2">
           <div className="flex items-center gap-2 mb-3">
             <div className="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600">
               <Users className="w-5 h-5" />
@@ -450,7 +450,7 @@ export function AdminLinePage() {
         </Card>
 
         {/* セルフ通知 */}
-        <Card className="p-5">
+        <Card className="p-5 lg:col-start-1 lg:row-start-2">
           <div className="flex items-center gap-2 mb-3">
             <div className="w-9 h-9 rounded-xl bg-purple-100 flex items-center justify-center text-purple-600">
               <Bell className="w-5 h-5" />
@@ -478,41 +478,42 @@ export function AdminLinePage() {
           </div>
         </Card>
 
-        {/* 個別チャット */}
-        <Card className="p-5">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600">
-              <MessageCircle className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="font-semibold text-gray-900">個別チャット連絡</h2>
-              <p className="text-xs text-gray-500">メンバーを選んで個別送信</p>
-            </div>
-          </div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">送信先メンバー</label>
-          <Select value={targetMember} onChange={(e) => setTargetMember(e.target.value)} className="mb-3">
-            <option value="">選択してください</option>
-            {lineMembers.length === 0 ? (
-              <option disabled>LINE連携メンバーなし</option>
-            ) : (
-              lineMembers.map((m) => (
-                <option key={m.id} value={m.lineUserId!}>
-                  {m.name}{m.name === adminName ? ' (admin)' : ''}
-                </option>
-              ))
-            )}
-          </Select>
-          <FloatTextarea rows={3} label="メッセージ本文…" value={dmMsg} onChange={(e) => setDmMsg(e.target.value)} disabled={sending} />
-          <div className="mt-3 flex justify-end">
-            <Button
-              onClick={() => send('/line/dm', { lineUserId: targetMember, message: dmMsg }, '個別チャット', () => setDmMsg(''))}
-              disabled={sending || !targetMember || !dmMsg.trim()}
-            >
-              <Send className="w-4 h-4" />送信
-            </Button>
-          </div>
-        </Card>
       </div>
+
+      {/* 個別チャット */}
+      <Card className="p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600">
+            <MessageCircle className="w-5 h-5" />
+          </div>
+          <div>
+            <h2 className="font-semibold text-gray-900">個別チャット連絡</h2>
+            <p className="text-xs text-gray-500">メンバーを選んで個別送信</p>
+          </div>
+        </div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">送信先メンバー</label>
+        <Select value={targetMember} onChange={(e) => setTargetMember(e.target.value)} className="mb-3">
+          <option value="">選択してください</option>
+          {lineMembers.length === 0 ? (
+            <option disabled>LINE連携メンバーなし</option>
+          ) : (
+            lineMembers.map((m) => (
+              <option key={m.id} value={m.lineUserId!}>
+                {m.name}{m.name === adminName ? ' (admin)' : ''}
+              </option>
+            ))
+          )}
+        </Select>
+        <FloatTextarea rows={3} label="メッセージ本文…" value={dmMsg} onChange={(e) => setDmMsg(e.target.value)} disabled={sending} />
+        <div className="mt-3 flex justify-end">
+          <Button
+            onClick={() => send('/line/dm', { lineUserId: targetMember, message: dmMsg }, '個別チャット', () => setDmMsg(''))}
+            disabled={sending || !targetMember || !dmMsg.trim()}
+          >
+            <Send className="w-4 h-4" />送信
+          </Button>
+        </div>
+      </Card>
 
       {/* 出勤依頼送信セクション */}
       {shiftRequests.length > 0 && (
@@ -580,7 +581,7 @@ export function AdminLinePage() {
                     );
                   })}
                   {shiftRequests.every(r => r.status !== 'pending') && (
-                    <p className="text-sm text-gray-400 text-center py-2">pendingの出勤依頼はありません</p>
+                    <p className="text-sm text-gray-400 text-center py-2">要請中の出勤依頼はありません</p>
                   )}
                 </div>
               </div>

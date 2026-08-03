@@ -54,6 +54,7 @@ function InviteNoticeItem({ invite, myName, onDone }: {
   const [confirmType, setConfirmType] = useState<ConfirmType>(null);
   const [adjStart, setAdjStart] = useState('20:00');
   const [adjEnd, setAdjEnd] = useState('02:00');
+  const [userComment, setUserComment] = useState('');
   const [responding, setResponding] = useState(false);
 
   const doRespond = async (type: 'accepted' | 'rejected' | 'adjusted') => {
@@ -70,6 +71,7 @@ function InviteNoticeItem({ invite, myName, onDone }: {
         response: type,
         adjustedTimeStart: type === 'adjusted' ? adjStart : undefined,
         adjustedTimeEnd: type === 'adjusted' ? adjEnd : undefined,
+        userComment: userComment || undefined,
       });
       if (res.ok) {
         if (res.result === 'full') {
@@ -123,6 +125,18 @@ function InviteNoticeItem({ invite, myName, onDone }: {
               {invite.comment}
             </div>
           )}
+
+          {/* ユーザーコメント入力欄 */}
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">コメント（任意）</label>
+            <textarea
+              value={userComment}
+              onChange={e => setUserComment(e.target.value)}
+              placeholder="一言メモを添えることができます…"
+              rows={2}
+              className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-400 resize-none"
+            />
+          </div>
 
           {/* 確認ダイアログ */}
           {confirmType === null ? (

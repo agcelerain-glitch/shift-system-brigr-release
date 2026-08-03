@@ -488,6 +488,7 @@ export interface CreateShiftRequestInput {
   timeLabel: string;
   requiredCount: number;
   createdBy: string;
+  comment?: string;
 }
 
 export async function createShiftRequest(input: CreateShiftRequestInput): Promise<string> {
@@ -569,6 +570,7 @@ export async function respondToShiftRequestInvite(params: {
   response: 'accepted' | 'rejected' | 'adjusted';
   adjustedTimeStart?: string;
   adjustedTimeEnd?: string;
+  userComment?: string;
 }): Promise<{ ok: boolean; result?: 'accepted' | 'rejected' | 'full' | 'already'; message: string }> {
   if (!API_BASE_URL) {
     await new Promise((r) => setTimeout(r, 400));
