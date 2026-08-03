@@ -15,29 +15,37 @@ import type { TemplateCode } from '../lib/config';
 type Mode = 'none' | 'apply' | 'other';
 type SubjectMode = TemplateCode | 'time';
 
-// 開始時刻: 09:00〜23:45（15分刻み）
-const START_OPTIONS: string[] = [];
+// 内部値（HH:MM形式、24:00〜=翌日）を表示ラベルに変換
+const displayTime = (value: string): string => {
+  const [hStr, mStr] = value.split(':');
+  const h = parseInt(hStr, 10);
+  if (h >= 24) return `翌${String(h - 24).padStart(2, '0')}:${mStr}`;
+  return value;
+};
+
+// ベース時間: 09:00〜23:45（15分刻み）
+const BASE_OPTIONS: string[] = [];
 for (let h = 9; h < 24; h++) {
   for (const m of [0, 15, 30, 45]) {
-    START_OPTIONS.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+    BASE_OPTIONS.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
   }
 }
-
-// 終了時刻: 09:00〜32:45（翌8:45まで。24:00=翌0:00、32:45=翌8:45）
-// 翌日の時刻でも日付は当日のまま保存（堅牢性確保）
-const END_OPTIONS: string[] = [...START_OPTIONS];
+// 翌日時間: 翌0:00〜翌8:45（内部値 24:00〜32:45）
+// 翌日の時刻でも日付は当日のまま保存
+const NEXT_DAY_OPTIONS: string[] = [];
 for (let h = 24; h <= 32; h++) {
   for (const m of [0, 15, 30, 45]) {
-    if (h === 32 && m > 45) break;
-    END_OPTIONS.push(`${h}:${String(m).padStart(2, '0')}`);
+    NEXT_DAY_OPTIONS.push(`${h}:${String(m).padStart(2, '0')}`);
   }
 }
 
-// 終了時刻のバリデーション: 24:00以上（翌日時刻）なら開始に関わらず有効
-const isTimeInvalid = (start: string, end: string): boolean => {
-  if (parseInt(end.split(':')[0], 10) >= 24) return false;
-  return start >= end;
-};
+// 開始・終了ともに09:00〜翌8:45（同じ範囲）
+const START_OPTIONS: string[] = [...BASE_OPTIONS, ...NEXT_DAY_OPTIONS];
+const END_OPTIONS: string[] = [...BASE_OPTIONS, ...NEXT_DAY_OPTIONS];
+
+// 終了時刻のバリデーション（分換算で比較）
+const toMinutes = (t: string): number => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+const isTimeInvalid = (start: string, end: string): boolean => toMinutes(start) >= toMinutes(end);
 
 type ApplyEntry = {
   id: string;
@@ -350,19 +358,16 @@ export function RequestPage() {
                           value={entry.timeStart}
                           onChange={(e) => updateApplyEntry(entry.id, { timeStart: e.target.value })}
                         >
-                          {START_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+                          {START_OPTIONS.map((t) => <option key={t} value={t}>{displayTime(t)}</option>)}
                         </Select>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                          終了時刻
-                          <span className="text-xs font-normal text-gray-400 ml-1">（24:00=翌0:00、32:45=翌8:45）</span>
-                        </label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">終了時刻</label>
                         <Select
                           value={entry.timeEnd}
                           onChange={(e) => updateApplyEntry(entry.id, { timeEnd: e.target.value })}
                         >
-                          {END_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+                          {END_OPTIONS.map((t) => <option key={t} value={t}>{displayTime(t)}</option>)}
                         </Select>
                         {isTimeInvalid(entry.timeStart, entry.timeEnd) && (
                           <p className="text-xs text-amber-600 mt-1">終了は開始より後にしてください</p>

@@ -8,7 +8,7 @@ import { useToast } from '../contexts/ToastContext';
 import { Card, EmptyState, Badge, Button, Tabs, Modal } from '../components/ui';
 import { Copy, CalendarDays, CheckCircle2, Clock, Trash2, AlertTriangle } from 'lucide-react';
 import { formatDateJP, copyToClipboard, todayStr, weekdayJP } from '../lib/utils';
-import { TEMPLATE_LABELS } from '../lib/types';
+import { TEMPLATE_LABELS, TEMPLATE_TIMES } from '../lib/types';
 import type { Shift } from '../lib/types';
 import { cancelShift, requestDeleteShift } from '../lib/db';
 
@@ -33,6 +33,12 @@ function ShiftCard({
         : shift.timeType === 'other'
           ? 'その他'
           : '時間指定なし';
+
+  // 1日分コピー用: テンプレートは実際の時間帯（例: 20:00〜LAST）を使う
+  const copyTimeLabel =
+    shift.timeType === 'template' && shift.template
+      ? `${TEMPLATE_TIMES[shift.template].start}〜${TEMPLATE_TIMES[shift.template].end}`
+      : timeLabel;
 
   const isDeleteReq = shift.status === 'delete_requested';
 
@@ -70,7 +76,7 @@ function ShiftCard({
           <Button size="sm" variant="secondary" onClick={() => onCopy(`${formatDateJP(shift.date)} ${shift.subject}`, '件名のみコピーしました')}>
             <Copy className="w-3.5 h-3.5" />件名のみ
           </Button>
-          <Button size="sm" variant="secondary" onClick={() => onCopy(`${formatDateJP(shift.date)} ${shift.subject} ${timeLabel}${shift.place ? ` 場所:${shift.place}` : ''}`, '1日分コピーしました')}>
+          <Button size="sm" variant="secondary" onClick={() => onCopy(`${formatDateJP(shift.date)} ${shift.subject} ${copyTimeLabel}${shift.place ? ` 場所:${shift.place}` : ''}`, '1日分コピーしました')}>
             <Copy className="w-3.5 h-3.5" />1日分
           </Button>
           {shift.status === 'plan' && onCancel && (
