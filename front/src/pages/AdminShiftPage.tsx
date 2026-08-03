@@ -665,8 +665,8 @@ export function AdminShiftPage() {
                           </div>
                           {/* 依頼追加フォーム（インライン） */}
                           {isAdding && (
-                            <div className="mt-2 border border-purple-200 rounded-xl p-3 bg-purple-50 space-y-2">
-                              <p className="text-xs font-semibold text-purple-700">必要人数・コメントを設定</p>
+                            <div className="mt-2 border border-purple-200 rounded-xl p-3 bg-purple-50">
+                              <p className="text-xs font-semibold text-purple-700 mb-2">必要人数を設定</p>
                               <div className="flex items-center gap-3">
                                 <div className="flex items-center gap-2">
                                   <button type="button" onClick={() => setDraftRequiredCount(c => Math.max(1, c - 1))} className="w-7 h-7 rounded-full bg-white border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100">-</button>
@@ -692,7 +692,6 @@ export function AdminShiftPage() {
                                   </Button>
                                 </div>
                               </div>
-                              <Input value={draftComment} onChange={e => setDraftComment(e.target.value)} placeholder="コメント（任意）" />
                             </div>
                           )}
                         </div>
