@@ -35,9 +35,47 @@ export interface Shift {
   subject: string; // 件名
   place?: string;
   headcount?: number;
+  irregular?: boolean; // 出勤依頼による特別申請フラグ
   createdAt: number; // 申請日
   updatedAt: number; // 最終修正日
   version: number; // 楽観ロック
+}
+
+// shiftRequests: 管理者による出勤依頼
+export type ShiftRequestStatus = 'pending' | 'closed';
+export interface ShiftRequest {
+  id: string;
+  date: string; // YYYY-MM-DD
+  place: string;
+  timeType: 'template' | 'time';
+  template?: TemplateCode;
+  timeStart?: string;
+  timeEnd?: string;
+  timeLabel: string; // 表示用ラベル（例: "A帯 20:00〜LAST"）
+  requiredCount: number;
+  acceptedCount: number;
+  status: ShiftRequestStatus;
+  createdAt: number;
+  createdBy: string;
+}
+
+// shiftRequestInvites: 出勤依頼の個別送信記録
+export type InviteResponse = 'pending' | 'accepted' | 'rejected' | 'adjusted';
+export interface ShiftRequestInvite {
+  id: string;
+  requestId: string;
+  date: string; // 検索・表示用
+  place: string;
+  timeLabel: string;
+  memberName: string;
+  lineUserId: string;
+  comment?: string;
+  sentAt: number;
+  response: InviteResponse;
+  adjustedTimeStart?: string;
+  adjustedTimeEnd?: string;
+  respondedAt?: number;
+  resultShiftId?: string;
 }
 
 // boardPublic: 全体掲示板

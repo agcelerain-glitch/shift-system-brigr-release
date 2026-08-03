@@ -6,8 +6,8 @@ import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { Card, Button, FloatTextarea, Select, Badge, Modal } from '../components/ui';
-import { Send, Bell, MessageCircle, Megaphone, Users, Info, Trash2, Wifi, WifiOff, CalendarDays, X } from 'lucide-react';
-import { callLineApi, subscribeLineConfig, deleteGroupId } from '../lib/db';
+import { Send, Bell, MessageCircle, Megaphone, Users, Info, Trash2, Wifi, WifiOff, CalendarDays, X, BellPlus, CheckSquare, Square, ChevronDown, ChevronUp } from 'lucide-react';
+import { callLineApi, subscribeLineConfig, deleteGroupId, sendShiftRequestInvites, deleteShiftRequest } from '../lib/db';
 import { isFirebaseConfigured, API_BASE_URL } from '../lib/firebase';
 import { formatDateJP, todayStr } from '../lib/utils';
 import { MonthCalendar, DayShiftList } from '../components/MonthCalendar';
@@ -37,7 +37,7 @@ function initPosRows(): PositionRow[] {
 }
 
 export function AdminLinePage() {
-  const { members, shifts } = useData();
+  const { members, shifts, shiftRequests } = useData();
   const { name: adminName } = useAuth();
   const toast = useToast();
   const [sending, setSending] = useState(false);
@@ -54,6 +54,13 @@ export function AdminLinePage() {
   // 個別チャット
   const [targetMember, setTargetMember] = useState('');
   const [dmMsg, setDmMsg] = useState('');
+  // 出勤依頼送信
+  const [selectedRequestIds, setSelectedRequestIds] = useState<Set<string>>(new Set());
+  const [inviteTargetLineIds, setInviteTargetLineIds] = useState<Set<string>>(new Set());
+  const [inviteComment, setInviteComment] = useState('');
+  const [inviteSendToGroup, setInviteSendToGroup] = useState(false);
+  const [sendingInvites, setSendingInvites] = useState(false);
+  const [inviteSectionOpen, setInviteSectionOpen] = useState(true);
   // GID管理
   const [groupId, setGroupId] = useState<string | null | undefined>(undefined);
   const [deletingGid, setDeletingGid] = useState(false);
@@ -506,6 +513,198 @@ export function AdminLinePage() {
           </div>
         </Card>
       </div>
+
+      {/* 出勤依頼送信セクション */}
+      {shiftRequests.length > 0 && (
+        <Card className="p-5 mt-4">
+          <button
+            className="w-full flex items-center justify-between mb-3"
+            onClick={() => setInviteSectionOpen(o => !o)}
+          >
+            <div className="flex items-center gap-2">
+              <div className="w-9 h-9 rounded-xl bg-purple-100 flex items-center justify-center text-purple-600">
+                <BellPlus className="w-5 h-5" />
+              </div>
+              <div className="text-left">
+                <h2 className="font-semibold text-gray-900">出勤依頼送信</h2>
+                <p className="text-xs text-gray-500">シフト調整ページで作成した依頼をメンバーへ送信</p>
+              </div>
+            </div>
+            {inviteSectionOpen ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+          </button>
+
+          {inviteSectionOpen && (
+            <div className="space-y-4">
+              {/* ① 出勤依頼を選択 */}
+              <div>
+                <p className="text-xs font-semibold text-gray-600 mb-2">① 送信する依頼を選択</p>
+                <div className="space-y-2">
+                  {shiftRequests.filter(r => r.status === 'pending').map(req => {
+                    const isSelected = selectedRequestIds.has(req.id);
+                    const remaining = req.requiredCount - req.acceptedCount;
+                    return (
+                      <button
+                        key={req.id}
+                        onClick={() => setSelectedRequestIds(prev => {
+                          const next = new Set(prev);
+                          isSelected ? next.delete(req.id) : next.add(req.id);
+                          return next;
+                        })}
+                        className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 text-left transition-all ${
+                          isSelected ? 'border-purple-400 bg-purple-50' : 'border-gray-200 hover:border-purple-200'
+                        }`}
+                      >
+                        {isSelected ? <CheckSquare className="w-4 h-4 text-purple-600 shrink-0" /> : <Square className="w-4 h-4 text-gray-300 shrink-0" />}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900">{req.date} · {req.place}</p>
+                          <p className="text-xs text-gray-500">{req.timeLabel} · 必要 {req.requiredCount}人（残り{remaining}人）</p>
+                        </div>
+                        <button
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            if (!window.confirm('この出勤依頼を削除しますか？')) return;
+                            try {
+                              await deleteShiftRequest(req.id);
+                              setSelectedRequestIds(prev => { const next = new Set(prev); next.delete(req.id); return next; });
+                              toast.show('出勤依頼を削除しました', 'success');
+                            } catch (err) {
+                              toast.show(`削除失敗: ${(err as Error).message}`, 'error');
+                            }
+                          }}
+                          className="p-1 text-gray-300 hover:text-red-400 transition"
+                          title="依頼を削除"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </button>
+                    );
+                  })}
+                  {shiftRequests.every(r => r.status !== 'pending') && (
+                    <p className="text-sm text-gray-400 text-center py-2">pendingの出勤依頼はありません</p>
+                  )}
+                </div>
+              </div>
+
+              {selectedRequestIds.size > 0 && (
+                <>
+                  {/* ② 送信先を選択（複数可） */}
+                  <div>
+                    <p className="text-xs font-semibold text-gray-600 mb-2">② 送信先メンバーを選択（複数可）</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {lineMembers.map(m => {
+                        const isSelected = inviteTargetLineIds.has(m.lineUserId!);
+                        return (
+                          <button
+                            key={m.id}
+                            onClick={() => setInviteTargetLineIds(prev => {
+                              const next = new Set(prev);
+                              isSelected ? next.delete(m.lineUserId!) : next.add(m.lineUserId!);
+                              return next;
+                            })}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border-2 transition-all ${
+                              isSelected ? 'border-purple-500 bg-purple-500 text-white' : 'border-gray-300 bg-white text-gray-700 hover:border-purple-300'
+                            }`}
+                          >
+                            {m.name}{m.name === adminName ? ' (admin)' : ''}
+                          </button>
+                        );
+                      })}
+                      {lineMembers.length === 0 && (
+                        <p className="text-xs text-gray-400">LINE連携メンバーなし</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* グループにも送信 */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setInviteSendToGroup(o => !o)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border-2 transition-all ${
+                        inviteSendToGroup ? 'border-green-500 bg-green-500 text-white' : 'border-gray-300 bg-white text-gray-700 hover:border-green-300'
+                      }`}
+                    >
+                      <Megaphone className="w-3.5 h-3.5" />グループにも送信
+                    </button>
+                    {inviteSendToGroup && !groupId && (
+                      <span className="text-xs text-red-500">GID未登録</span>
+                    )}
+                  </div>
+
+                  {/* コメント */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1.5">③ コメント（任意）</label>
+                    <FloatTextarea
+                      rows={2}
+                      label="追加メッセージ…"
+                      value={inviteComment}
+                      onChange={e => setInviteComment(e.target.value)}
+                      disabled={sendingInvites}
+                    />
+                  </div>
+
+                  {/* 送信ボタン */}
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => { setSelectedRequestIds(new Set()); setInviteTargetLineIds(new Set()); setInviteComment(''); setInviteSendToGroup(false); }}
+                    >
+                      リセット
+                    </Button>
+                    <Button
+                      disabled={sendingInvites || (inviteTargetLineIds.size === 0 && !inviteSendToGroup)}
+                      onClick={async () => {
+                        if (inviteTargetLineIds.size === 0 && !inviteSendToGroup) {
+                          toast.show('送信先またはグループを選択してください', 'error');
+                          return;
+                        }
+                        setSendingInvites(true);
+                        try {
+                          const targetMembersMap = new Map(lineMembers.map(m => [m.lineUserId!, m.name]));
+                          const targets = [...inviteTargetLineIds].map(lid => ({ memberName: targetMembersMap.get(lid) ?? lid, lineUserId: lid }));
+                          let allOk = true;
+                          for (const reqId of selectedRequestIds) {
+                            const req = shiftRequests.find(r => r.id === reqId);
+                            if (!req) continue;
+                            const groupMsg = inviteSendToGroup
+                              ? `【出勤依頼】\n${req.date} ${req.place} ${req.timeLabel}\n必要人数: ${req.requiredCount}人\n${inviteComment ? inviteComment + '\n' : ''}ウェブアプリのお知らせから回答してください。`
+                              : undefined;
+                            const res = await sendShiftRequestInvites({
+                              requestId: reqId,
+                              date: req.date,
+                              place: req.place,
+                              timeLabel: req.timeLabel,
+                              targetMembers: targets,
+                              comment: inviteComment || undefined,
+                              sendToGroup: inviteSendToGroup,
+                              groupMessage: groupMsg,
+                            });
+                            if (!res.ok) { allOk = false; toast.show(`送信失敗: ${res.message}`, 'error'); }
+                          }
+                          if (allOk) {
+                            toast.show('出勤依頼を送信しました', 'success');
+                            setSelectedRequestIds(new Set());
+                            setInviteTargetLineIds(new Set());
+                            setInviteComment('');
+                            setInviteSendToGroup(false);
+                          }
+                        } catch (e) {
+                          toast.show(`送信エラー: ${(e as Error).message}`, 'error');
+                        } finally {
+                          setSendingInvites(false);
+                        }
+                      }}
+                    >
+                      <Send className="w-4 h-4" />
+                      {sendingInvites ? '送信中…' : `出勤依頼を送信（${selectedRequestIds.size}件）`}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </Card>
+      )}
 
       {/* [開発者メモ] トークン等の秘匿情報はフロントに置かず、Heroku側のAPIで取り扱います。フロントは fetch でエンドポイントを呼ぶだけです。 */}
 

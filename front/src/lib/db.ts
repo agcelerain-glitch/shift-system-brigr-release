@@ -19,7 +19,7 @@ import {
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured, API_BASE_URL } from './firebase';
 import { mockStore } from './mockStore';
-import type { Shift, Member, BoardPublic, BoardPrivate, ApprovalLog, DeletedBoardPublic, DeletedBoardPrivate, ShiftStatus, TimeType, TemplateCode, Role } from './types';
+import type { Shift, Member, BoardPublic, BoardPrivate, ApprovalLog, DeletedBoardPublic, DeletedBoardPrivate, ShiftStatus, TimeType, TemplateCode, Role, ShiftRequest, ShiftRequestInvite, ShiftRequestStatus, InviteResponse } from './types';
 
 const now = () => Date.now();
 const toMs = (t: unknown): number => {
@@ -449,6 +449,139 @@ export async function callLineApi(path: string, body: Record<string, unknown>): 
     });
     if (!res.ok) return { ok: false, message: `HTTP ${res.status}` };
     return { ok: true, message: '送信しました' };
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
+}
+
+// ---- shiftRequests ----
+export function subscribeShiftRequests(cb: (items: ShiftRequest[]) => void): () => void {
+  if (!isFirebaseConfigured || !db) { cb([]); return () => {}; }
+  return subscribeReal<ShiftRequest>(
+    query(collection(db!, 'shiftRequests'), orderBy('date', 'asc')),
+    (r) => ({
+      id: r.id as string,
+      date: r.date as string,
+      place: r.place as string,
+      timeType: r.timeType as 'template' | 'time',
+      template: r.template as TemplateCode | undefined,
+      timeStart: r.timeStart as string | undefined,
+      timeEnd: r.timeEnd as string | undefined,
+      timeLabel: r.timeLabel as string,
+      requiredCount: r.requiredCount as number,
+      acceptedCount: r.acceptedCount as number,
+      status: r.status as ShiftRequestStatus,
+      createdAt: toMs(r.createdAt),
+      createdBy: r.createdBy as string,
+    }) as ShiftRequest,
+    cb,
+  );
+}
+
+export interface CreateShiftRequestInput {
+  date: string;
+  place: string;
+  timeType: 'template' | 'time';
+  template?: TemplateCode;
+  timeStart?: string;
+  timeEnd?: string;
+  timeLabel: string;
+  requiredCount: number;
+  createdBy: string;
+}
+
+export async function createShiftRequest(input: CreateShiftRequestInput): Promise<string> {
+  const clean = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined));
+  const payload = {
+    ...clean,
+    acceptedCount: 0,
+    status: 'pending' as ShiftRequestStatus,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+  const ref = await addDoc(collection(db!, 'shiftRequests'), payload);
+  return ref.id;
+}
+
+export async function deleteShiftRequest(requestId: string): Promise<void> {
+  if (!isFirebaseConfigured || !db) return;
+  await deleteDoc(doc(db!, 'shiftRequests', requestId));
+}
+
+// ---- shiftRequestInvites ----
+export function subscribeShiftRequestInvites(cb: (items: ShiftRequestInvite[]) => void): () => void {
+  if (!isFirebaseConfigured || !db) { cb([]); return () => {}; }
+  return subscribeReal<ShiftRequestInvite>(
+    query(collection(db!, 'shiftRequestInvites'), orderBy('sentAt', 'desc')),
+    (r) => ({
+      id: r.id as string,
+      requestId: r.requestId as string,
+      date: r.date as string,
+      place: r.place as string,
+      timeLabel: r.timeLabel as string,
+      memberName: r.memberName as string,
+      lineUserId: r.lineUserId as string,
+      comment: r.comment as string | undefined,
+      sentAt: toMs(r.sentAt),
+      response: r.response as InviteResponse,
+      adjustedTimeStart: r.adjustedTimeStart as string | undefined,
+      adjustedTimeEnd: r.adjustedTimeEnd as string | undefined,
+      respondedAt: r.respondedAt ? toMs(r.respondedAt) : undefined,
+      resultShiftId: r.resultShiftId as string | undefined,
+    }) as ShiftRequestInvite,
+    cb,
+  );
+}
+
+// 出勤依頼の個別送信（バックエンド経由でshiftRequestInvitesを作成しLINE通知）
+export async function sendShiftRequestInvites(params: {
+  requestId: string;
+  date: string;
+  place: string;
+  timeLabel: string;
+  targetMembers: { memberName: string; lineUserId: string }[];
+  comment?: string;
+  sendToGroup?: boolean;
+  groupMessage?: string;
+}): Promise<{ ok: boolean; message: string }> {
+  if (!API_BASE_URL) {
+    await new Promise((r) => setTimeout(r, 400));
+    return { ok: true, message: '[モック] 出勤依頼を送信しました' };
+  }
+  try {
+    const res = await fetch(`${API_BASE_URL}/shift-request/send-invites`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    const json = await res.json();
+    return json;
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
+}
+
+// 出勤依頼回答（バックエンド経由でconfirmedシフト作成 + 管理者通知）
+export async function respondToShiftRequestInvite(params: {
+  inviteId: string;
+  requestId: string;
+  memberName: string;
+  response: 'accepted' | 'rejected' | 'adjusted';
+  adjustedTimeStart?: string;
+  adjustedTimeEnd?: string;
+}): Promise<{ ok: boolean; result?: 'accepted' | 'rejected' | 'full' | 'already'; message: string }> {
+  if (!API_BASE_URL) {
+    await new Promise((r) => setTimeout(r, 400));
+    return { ok: true, result: params.response === 'rejected' ? 'rejected' : 'accepted', message: '[モック] 回答しました' };
+  }
+  try {
+    const res = await fetch(`${API_BASE_URL}/shift-request/respond`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    const json = await res.json();
+    return json;
   } catch (e) {
     return { ok: false, message: (e as Error).message };
   }

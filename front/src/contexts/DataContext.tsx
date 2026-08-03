@@ -9,9 +9,11 @@ import {
   subscribeBoardPublicDeleted,
   subscribeBoardPrivateDeleted,
   subscribeApprovalLogs,
+  subscribeShiftRequests,
+  subscribeShiftRequestInvites,
 } from '../lib/db';
 import { useAuth } from './AuthContext';
-import type { Member, Shift, BoardPublic, BoardPrivate, ApprovalLog, DeletedBoardPublic, DeletedBoardPrivate } from '../lib/types';
+import type { Member, Shift, BoardPublic, BoardPrivate, ApprovalLog, DeletedBoardPublic, DeletedBoardPrivate, ShiftRequest, ShiftRequestInvite } from '../lib/types';
 
 interface DataCtx {
   members: Member[];
@@ -21,6 +23,8 @@ interface DataCtx {
   boardPublicDeleted: DeletedBoardPublic[];
   boardPrivateDeleted: DeletedBoardPrivate[];
   approvalLogs: ApprovalLog[];
+  shiftRequests: ShiftRequest[];
+  shiftRequestInvites: ShiftRequestInvite[];
   loaded: boolean;
   firestoreError: string | null;
   refresh: () => void;
@@ -37,6 +41,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [boardPublicDeleted, setBoardPublicDeleted] = useState<DeletedBoardPublic[]>([]);
   const [boardPrivateDeleted, setBoardPrivateDeleted] = useState<DeletedBoardPrivate[]>([]);
   const [approvalLogs, setApprovalLogs] = useState<ApprovalLog[]>([]);
+  const [shiftRequests, setShiftRequests] = useState<ShiftRequest[]>([]);
+  const [shiftRequestInvites, setShiftRequestInvites] = useState<ShiftRequestInvite[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [firestoreError, setFirestoreError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -52,6 +58,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setBoardPublicDeleted([]);
       setBoardPrivateDeleted([]);
       setApprovalLogs([]);
+      setShiftRequests([]);
+      setShiftRequestInvites([]);
       setLoaded(false);
       return;
     }
@@ -83,6 +91,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       safeSubscribe(subscribeBoardPublic, setBoardPublic, 'boardPublic'),
       safeSubscribe(subscribeBoardPrivate, setBoardPrivate, 'boardPrivate'),
       safeSubscribe(subscribeApprovalLogs, setApprovalLogs, 'approvalLogs'),
+      safeSubscribe(subscribeShiftRequests, setShiftRequests, 'shiftRequests'),
+      safeSubscribe(subscribeShiftRequestInvites, setShiftRequestInvites, 'shiftRequestInvites'),
     ];
     // admin専用コレクション（削除済み掲示板）
     if (role === 'admin') {
@@ -97,7 +107,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [role, initializing, refreshKey]); // auth状態またはrefreshKeyが変わるたびに再購読
 
   return (
-    <Ctx.Provider value={{ members, shifts, boardPublic, boardPrivate, boardPublicDeleted, boardPrivateDeleted, approvalLogs, loaded, firestoreError, refresh }}>
+    <Ctx.Provider value={{ members, shifts, boardPublic, boardPrivate, boardPublicDeleted, boardPrivateDeleted, approvalLogs, shiftRequests, shiftRequestInvites, loaded, firestoreError, refresh }}>
       {children}
     </Ctx.Provider>
   );
