@@ -756,10 +756,6 @@ export function AdminShiftPage() {
                         <button type="button" onClick={() => setDraftRequiredCount(c => c + 1)} className="w-7 h-7 rounded-full bg-white border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100">+</button>
                       </div>
                     </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">コメント（任意）</label>
-                      <Input value={draftComment} onChange={e => setDraftComment(e.target.value)} placeholder="依頼内容や備考…" />
-                    </div>
                     <div className="flex gap-2 justify-end">
                       <Button size="sm" variant="ghost" onClick={resetDraftForm}>キャンセル</Button>
                       <Button size="sm" variant="success" disabled={savingRequest} onClick={handleSaveFreeRequest}>
