@@ -100,36 +100,30 @@ function getNextWeekRange() {
   return { start, end, label: `${formatDateShort(start)}〜${formatDateShort(end)}` };
 }
 
-// ─── 管理者通知先リスト（Firestoreから取得） ─────────────
+// ─── 管理者通知先リスト（membersコレクションから自動取得） ─────────────
 
 /**
- * config/notify.adminLineIds から管理者LINE IDを取得する。
- * ドキュメントが存在しない場合は LINE_SELF_USER_ID で自動初期化。
- * Firestore コンソールで adminLineIds 配列を編集することで管理者を追加/削除できる。
+ * members コレクションから role === 'admin' かつ lineUserId が設定されているメンバーの
+ * lineUserId を取得する。管理者がログインした時点で自動登録されるため手動設定不要。
+ * 取得0件の場合は LINE_SELF_USER_ID にフォールバック。
  */
 async function getAdminNotifyIds() {
   const selfId = process.env.LINE_SELF_USER_ID ?? null;
-  const configRef = db.collection('config').doc('notify');
 
   try {
-    const snap = await configRef.get();
-
-    if (!snap.exists) {
-      // 初回: LINE_SELF_USER_ID を初期値として登録
-      const initial = selfId ? [selfId] : [];
-      await configRef.set({
-        adminLineIds: initial,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-      console.log(`[remind] config/notify を初期化 (adminLineIds: ${initial.length}件)`);
-      return initial;
+    const snap = await db.collection('members').where('role', '==', 'admin').get();
+    const ids = snap.docs
+      .map((d) => d.data().lineUserId)
+      .filter(Boolean);
+    if (ids.length > 0) {
+      console.log(`[remind] 管理者通知先: ${ids.length}件 (members.role=admin)`);
+      return ids;
     }
-
-    const ids = (snap.data()?.adminLineIds ?? []).filter(Boolean);
-    console.log(`[remind] 管理者通知先: ${ids.length}件 (config/notify)`);
-    return ids;
+    // 管理者がまだログイン登録していない場合は LINE_SELF_USER_ID にフォールバック
+    console.warn('[remind] members に role=admin のメンバーなし。LINE_SELF_USER_ID にフォールバック');
+    return selfId ? [selfId] : [];
   } catch (e) {
-    console.warn('[remind] config/notify 読み取り失敗、フォールバック:', e?.message);
+    console.warn('[remind] members 読み取り失敗、フォールバック:', e?.message);
     return selfId ? [selfId] : [];
   }
 }
