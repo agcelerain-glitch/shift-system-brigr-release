@@ -259,10 +259,10 @@ export function AdminShiftPage() {
   const unavailCount = shifts.filter((s) => s.timeType === 'none' && s.status === 'plan').length;
   const deleteReqCount = shifts.filter((s) => s.status === 'delete_requested').length;
 
-  // 本日から7日間の日ごとシフト集計
+  // 本日から18日間の日ごとシフト集計
   const today = todayStr();
   const weekSummary = useMemo(() => {
-    return Array.from({ length: 7 }, (_, i) => {
+    return Array.from({ length: 18 }, (_, i) => {
       const date = addDays(today, i);
       const d = new Date(date + 'T00:00:00');
       const dayShifts = shifts.filter((s) => s.date === date);
@@ -475,7 +475,7 @@ export function AdminShiftPage() {
 
       {/* 週間人数サマリー */}
       <Card className="p-3 mb-4 overflow-x-auto">
-        <p className="text-xs font-medium text-gray-500 mb-2">今後7日間の人数</p>
+        <p className="text-xs font-medium text-gray-500 mb-2">今後18日間の人数（横スクロール）</p>
         <div className="flex gap-2 min-w-max">
           {weekSummary.map(({ date, wd, day, isToday, isSun, isSat, confirmed, plan, reviewed, unavailable }) => (
             <button
