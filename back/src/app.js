@@ -228,7 +228,7 @@ app.post('/shift-request/send-invites', async (req, res, next) => {
 // 出勤依頼への回答処理（confirmedシフト作成 + 管理者全員LINE通知）
 app.post('/shift-request/respond', async (req, res, next) => {
   try {
-    const { inviteId, requestId, memberName, response, adjustedTimeStart, adjustedTimeEnd } = req.body;
+    const { inviteId, requestId, memberName, response, adjustedTimeStart, adjustedTimeEnd, userComment } = req.body;
     if (!inviteId || !requestId || !memberName || !response) {
       return res.status(400).json({ ok: false, message: '必須パラメータが不足しています' });
     }
@@ -275,7 +275,7 @@ app.post('/shift-request/respond', async (req, res, next) => {
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
           version: 1,
-          subject: `出勤依頼（特別） ${memberName}`,
+          subject: `出勤 ${memberName}`,
         };
 
         if (response === 'adjusted' && adjustedTimeStart && adjustedTimeEnd) {
@@ -300,14 +300,17 @@ app.post('/shift-request/respond', async (req, res, next) => {
         };
         if (adjustedTimeStart) inviteUpdate.adjustedTimeStart = adjustedTimeStart;
         if (adjustedTimeEnd) inviteUpdate.adjustedTimeEnd = adjustedTimeEnd;
+        if (userComment) inviteUpdate.userComment = userComment;
         tx.update(inviteRef, inviteUpdate);
       });
       result = 'accepted';
     } else if (response === 'rejected') {
-      await inviteRef.update({
+      const rejUpdate = {
         response: 'rejected',
         respondedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
+      };
+      if (userComment) rejUpdate.userComment = userComment;
+      await inviteRef.update(rejUpdate);
       result = 'rejected';
     }
 
