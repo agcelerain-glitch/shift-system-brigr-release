@@ -233,7 +233,10 @@ export function MonthCalendar({
 export function DayShiftList({ date, shifts }: { date: string; shifts: Shift[] }) {
   const placeGroups = useMemo(() => {
     const sorted = [...shifts].sort((a, b) => {
-      const pc = (a.place ?? '').localeCompare(b.place ?? '', 'ja');
+      // 場所未設定（空・undefined）は最下位
+      const pa = a.place || '￿';
+      const pb = b.place || '￿';
+      const pc = pa.localeCompare(pb, 'ja');
       if (pc !== 0) return pc;
       const sa = STATUS_ORDER[a.status] ?? 3;
       const sb = STATUS_ORDER[b.status] ?? 3;
