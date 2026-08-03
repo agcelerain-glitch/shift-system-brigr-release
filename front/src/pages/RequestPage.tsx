@@ -7,21 +7,13 @@ import { useData } from '../contexts/DataContext';
 import { useToast } from '../contexts/ToastContext';
 import { Card, Button, Input, Select, Badge, EmptyState } from '../components/ui';
 import { FilePlus, Ban, Clock, Wallet, CheckCircle2, AlertTriangle, Trash2, Plus } from 'lucide-react';
-import { formatDateJP, weekdayJP } from '../lib/utils';
+import { formatDateJP, weekdayJP, displayTime } from '../lib/utils';
 import { createShift, findShiftByMemberDate, cancelShift } from '../lib/db';
 import { SUBJECT_OPTIONS, TEMPLATE_LABELS, TEMPLATE_TIMES } from '../lib/config';
 import type { TemplateCode } from '../lib/config';
 
 type Mode = 'none' | 'apply' | 'other';
 type SubjectMode = TemplateCode | 'time';
-
-// 内部値（HH:MM形式、24:00〜=翌日）を表示ラベルに変換
-const displayTime = (value: string): string => {
-  const [hStr, mStr] = value.split(':');
-  const h = parseInt(hStr, 10);
-  if (h >= 24) return `翌${String(h - 24).padStart(2, '0')}:${mStr}`;
-  return value;
-};
 
 // ベース時間: 09:00〜23:45（15分刻み）
 const BASE_OPTIONS: string[] = [];
@@ -30,12 +22,12 @@ for (let h = 9; h < 24; h++) {
     BASE_OPTIONS.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
   }
 }
-// 翌日時間: 翌0:00〜翌8:45（内部値 24:00〜32:45）
+// 翌日時間: 翌0:00〜翌8:45（内部値 00:00〜08:45、h<9で「翌」表示）
 // 翌日の時刻でも日付は当日のまま保存
 const NEXT_DAY_OPTIONS: string[] = [];
-for (let h = 24; h <= 32; h++) {
+for (let h = 0; h <= 8; h++) {
   for (const m of [0, 15, 30, 45]) {
-    NEXT_DAY_OPTIONS.push(`${h}:${String(m).padStart(2, '0')}`);
+    NEXT_DAY_OPTIONS.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
   }
 }
 
@@ -43,8 +35,8 @@ for (let h = 24; h <= 32; h++) {
 const START_OPTIONS: string[] = [...BASE_OPTIONS, ...NEXT_DAY_OPTIONS];
 const END_OPTIONS: string[] = [...BASE_OPTIONS, ...NEXT_DAY_OPTIONS];
 
-// 終了時刻のバリデーション（分換算で比較）
-const toMinutes = (t: string): number => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+// 終了時刻のバリデーション（h<9は翌日として+24h換算）
+const toMinutes = (t: string): number => { const [h, m] = t.split(':').map(Number); const adj = h < 9 ? h + 24 : h; return adj * 60 + m; };
 const isTimeInvalid = (start: string, end: string): boolean => toMinutes(start) >= toMinutes(end);
 
 type ApplyEntry = {
@@ -64,7 +56,7 @@ function newEntry(): ApplyEntry {
     subjectMode: 'A',
     timeAdjust: false,
     timeStart: TEMPLATE_TIMES.A.start,
-    timeEnd: '26:00',
+    timeEnd: '02:00',
     dupWarning: null,
   };
 }
@@ -106,7 +98,7 @@ export function RequestPage() {
         subjectMode: mode,
         timeAdjust: false,
         timeStart: TEMPLATE_TIMES[tCode].start,
-        timeEnd: '26:00',
+        timeEnd: '02:00',
       });
     }
   };

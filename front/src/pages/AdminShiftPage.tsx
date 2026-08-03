@@ -11,7 +11,7 @@ import {
   CalendarDays, Calendar, Hash, ChevronDown, ChevronRight, History, Trash2, Plus, Minus,
   AlertTriangle,
 } from 'lucide-react';
-import { formatDateJP, formatDateTimeJP, isPast7Days, weekdayJP, todayStr, addDays } from '../lib/utils';
+import { formatDateJP, formatDateTimeJP, isPast7Days, weekdayJP, todayStr, addDays, displayTime } from '../lib/utils';
 import { PLACE_OPTIONS, TEMPLATE_LABELS } from '../lib/config';
 import type { Shift, ApprovalLog } from '../lib/types';
 import { approveShift, restoreShift, updateMemberLineId, deleteMember, adminDeleteShift } from '../lib/db';
@@ -37,12 +37,16 @@ const saveMemberLastPlace = (memberName: string, place: string) => {
 
 function timeLabelOf(s: Shift): string {
   if (s.timeType === 'template' && s.template) return TEMPLATE_LABELS[s.template];
-  if (s.timeType === 'time') return `${s.timeStart}〜${s.timeEnd}`;
+  if (s.timeType === 'time') return `${displayTime(s.timeStart)}〜${displayTime(s.timeEnd)}`;
   if (s.timeType === 'other') return 'その他';
   return '';
 }
 function timeSortVal(s: Shift): number {
-  if (s.timeType === 'time' && s.timeStart) return parseInt(s.timeStart.replace(':', ''), 10);
+  if (s.timeType === 'time' && s.timeStart) {
+    const [h, m] = s.timeStart.split(':').map(Number);
+    const adj = h >= 24 ? h : h < 9 ? h + 24 : h;
+    return adj * 100 + m;
+  }
   if (s.timeType === 'template' && s.template) return { A: 2000, B: 2030, C: 2130, D: 2200 }[s.template];
   return 9999;
 }

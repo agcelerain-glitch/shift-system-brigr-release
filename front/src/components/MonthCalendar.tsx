@@ -7,21 +7,25 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Shift } from '../lib/types';
 import { TEMPLATE_TIMES } from '../lib/types';
 import {
-  getTwoWeekGrid, getWeekStart, getWeekLabel, addDays, todayStr, formatDateJP,
+  getTwoWeekGrid, getWeekStart, getWeekLabel, addDays, todayStr, formatDateJP, displayTime,
 } from '../lib/utils';
 import { Badge } from './ui';
 
 function getTimeLabel(s: Shift): string {
-  if (s.timeType === 'time' && s.timeStart && s.timeEnd) return `${s.timeStart}〜${s.timeEnd}`;
+  if (s.timeType === 'time' && s.timeStart && s.timeEnd) return `${displayTime(s.timeStart)}〜${displayTime(s.timeEnd)}`;
   if (s.timeType === 'template' && s.template && TEMPLATE_TIMES[s.template]) {
     const t = TEMPLATE_TIMES[s.template];
-    return `${t.start}〜${t.end}`;
+    return `${t.start}〜${displayTime(t.end)}`;
   }
   return '';
 }
 
 function timeSortVal(s: Shift): number {
-  if (s.timeType === 'time' && s.timeStart) return parseInt(s.timeStart.replace(':', ''), 10);
+  if (s.timeType === 'time' && s.timeStart) {
+    const [h, m] = s.timeStart.split(':').map(Number);
+    const adj = h >= 24 ? h : h < 9 ? h + 24 : h;
+    return adj * 100 + m;
+  }
   if (s.timeType === 'template' && s.template)
     return ({ A: 2000, B: 2030, C: 2130, D: 2200 } as Record<string, number>)[s.template] ?? 9000;
   return 9999;

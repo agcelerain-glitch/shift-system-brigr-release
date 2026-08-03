@@ -16,19 +16,26 @@ export const TEMPLATE_LABELS: Record<TemplateCode, string> = {
   D: 'D帯',
 };
 
-// ---- テンプレートA〜Dの目安時間（26:00=翌2:00、LAST=閉店）----
+// ---- テンプレートA〜Dの目安時間（翌日時刻は00:00形式で保存、表示は displayTime() で「翌」付与）----
 export const TEMPLATE_TIMES: Record<TemplateCode, { start: string; end: string }> = {
   A: { start: '20:00', end: 'LAST' },
-  B: { start: '20:30', end: '26:00' },
+  B: { start: '20:30', end: '02:00' },
   C: { start: '21:30', end: 'LAST' },
-  D: { start: '22:00', end: '26:00' },
+  D: { start: '22:00', end: '02:00' },
+};
+
+// 翌日時刻（h < 9）に「翌」を付ける（config内ラベル用ヘルパー）
+const fmtEnd = (t: string): string => {
+  if (t === 'LAST') return t;
+  const h = parseInt(t.split(':')[0], 10);
+  return h < 9 ? `翌${t}` : t;
 };
 
 // ---- シフト申請フォームの件名選択肢（ラベルにTEMPLATE_TIMESの時間帯を自動表示）----
 export const SUBJECT_OPTIONS: { value: TemplateCode | 'time'; label: string; hasTime: boolean }[] = [
-  { value: 'A', label: `${TEMPLATE_LABELS.A}（${TEMPLATE_TIMES.A.start}〜${TEMPLATE_TIMES.A.end}）`, hasTime: false },
-  { value: 'B', label: `${TEMPLATE_LABELS.B}（${TEMPLATE_TIMES.B.start}〜${TEMPLATE_TIMES.B.end}）`, hasTime: false },
-  { value: 'C', label: `${TEMPLATE_LABELS.C}（${TEMPLATE_TIMES.C.start}〜${TEMPLATE_TIMES.C.end}）`, hasTime: false },
-  { value: 'D', label: `${TEMPLATE_LABELS.D}（${TEMPLATE_TIMES.D.start}〜${TEMPLATE_TIMES.D.end}）`, hasTime: false },
+  { value: 'A', label: `${TEMPLATE_LABELS.A}（${TEMPLATE_TIMES.A.start}〜${fmtEnd(TEMPLATE_TIMES.A.end)}）`, hasTime: false },
+  { value: 'B', label: `${TEMPLATE_LABELS.B}（${TEMPLATE_TIMES.B.start}〜${fmtEnd(TEMPLATE_TIMES.B.end)}）`, hasTime: false },
+  { value: 'C', label: `${TEMPLATE_LABELS.C}（${TEMPLATE_TIMES.C.start}〜${fmtEnd(TEMPLATE_TIMES.C.end)}）`, hasTime: false },
+  { value: 'D', label: `${TEMPLATE_LABELS.D}（${TEMPLATE_TIMES.D.start}〜${fmtEnd(TEMPLATE_TIMES.D.end)}）`, hasTime: false },
   { value: 'time', label: '時間指定', hasTime: true },
 ];

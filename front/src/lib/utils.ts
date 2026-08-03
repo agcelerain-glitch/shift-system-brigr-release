@@ -71,6 +71,19 @@ export const weekdayColor = (date: string): string => {
   return 'text-gray-700';
 };
 
+// 時刻文字列を表示用に変換（翌日時刻に「翌」を付与）
+// h < 9: 新形式（02:00 → 翌02:00）/ h >= 24: 旧形式互換（26:00 → 翌02:00）/ LAST等は返す
+export const displayTime = (value: string): string => {
+  if (!value) return value;
+  const parts = value.split(':');
+  if (parts.length !== 2) return value;
+  const h = parseInt(parts[0], 10);
+  if (isNaN(h)) return value;
+  if (h >= 24) return `翌${String(h - 24).padStart(2, '0')}:${parts[1]}`;
+  if (h < 9) return `翌${String(h).padStart(2, '0')}:${parts[1]}`;
+  return value;
+};
+
 export const copyToClipboard = async (text: string): Promise<boolean> => {
   try {
     await navigator.clipboard.writeText(text);

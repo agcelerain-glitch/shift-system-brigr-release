@@ -7,7 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { Card, EmptyState, Badge, Button, Tabs, Modal } from '../components/ui';
 import { Copy, CalendarDays, CheckCircle2, Clock, Trash2, AlertTriangle } from 'lucide-react';
-import { formatDateJP, copyToClipboard, todayStr, weekdayJP } from '../lib/utils';
+import { formatDateJP, copyToClipboard, todayStr, weekdayJP, displayTime } from '../lib/utils';
 import { TEMPLATE_LABELS, TEMPLATE_TIMES } from '../lib/types';
 import type { Shift } from '../lib/types';
 import { cancelShift, requestDeleteShift } from '../lib/db';
@@ -29,7 +29,7 @@ function ShiftCard({
     shift.timeType === 'template' && shift.template
       ? TEMPLATE_LABELS[shift.template]
       : shift.timeType === 'time'
-        ? `${shift.timeStart}〜${shift.timeEnd}`
+        ? `${displayTime(shift.timeStart)}〜${displayTime(shift.timeEnd)}`
         : shift.timeType === 'other'
           ? 'その他'
           : '時間指定なし';
@@ -37,7 +37,7 @@ function ShiftCard({
   // 1日分コピー用: テンプレートは実際の時間帯（例: 20:00〜LAST）を使う
   const copyTimeLabel =
     shift.timeType === 'template' && shift.template
-      ? `${TEMPLATE_TIMES[shift.template].start}〜${TEMPLATE_TIMES[shift.template].end}`
+      ? `${TEMPLATE_TIMES[shift.template].start}〜${displayTime(TEMPLATE_TIMES[shift.template].end)}`
       : timeLabel;
 
   const isDeleteReq = shift.status === 'delete_requested';

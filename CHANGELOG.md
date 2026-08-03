@@ -1,5 +1,54 @@
 # CHANGELOG
 
+## 2026-08-03（54回目）
+### 変更内容
+- [front/src/lib/utils.ts] `displayTime()` を追加。h≥24（旧形式 "26:00"→"翌02:00"）・h<9（新形式 "02:00"→"翌02:00"）の両方に対応。全ファイルで共通利用
+- [front/src/lib/config.ts] `TEMPLATE_TIMES` の B.end・D.end を "26:00" から "02:00" に変更（新保存形式）。`fmtEnd()` ヘルパーを追加し `SUBJECT_OPTIONS` ラベルに "翌02:00" を正しく表示
+- [front/src/pages/RequestPage.tsx] ローカル `displayTime` を削除し `utils.ts` の共通版を使用。`NEXT_DAY_OPTIONS` を "24:00〜32:45" から "00:00〜08:45" に変更（新保存形式）。`toMinutes()` で h<9 を +24h 換算するよう修正。`newEntry()` と `handleSubjectModeChange` の初期 `timeEnd` を "26:00" → "02:00" に変更
+- [front/src/pages/PersonalPage.tsx] `displayTime` をインポート。`timeType === 'time'` の timeLabel に `displayTime()` を適用。copyTimeLabel のテンプレート end にも適用（"02:00"→"翌02:00" 表示）
+- [front/src/pages/AdminShiftPage.tsx] `displayTime` をインポート。`timeLabelOf()` の time 表示に `displayTime()` を適用。`timeSortVal()` を h<9（新形式）と h≥24（旧形式互換）の両方に対応するよう修正
+- [front/src/components/MonthCalendar.tsx] `displayTime` をインポート。`getTimeLabel()` に `displayTime()` を適用。`timeSortVal()` を同様に修正
+### デプロイ
+- GitHub (front/): プッシュ済み（Vercel 自動デプロイ）
+
+## 2026-08-03（53回目）
+### 変更内容
+- [front/src/pages/PersonalPage.tsx] 1日分コピーのテンプレート時間表記を修正。テンプレート時は "A帯" の代わりに `TEMPLATE_TIMES` の時間帯（例: `20:00〜LAST`）を使う。時間指定・時間調整の表示は変更なし
+- [front/src/pages/RequestPage.tsx] 開始・終了時刻ドロップダウンで 24:00〜 を "翌0:00〜" 形式で表示。開始時刻に翌日範囲（翌0:00〜翌8:45）を追加。バリデーションを分換算の数値比較に変更（start >= 24 でも正しく判定）。ヒントテキスト "(24:00=翌0:00…)" を削除（ドロップダウン自体に表示されるため不要）
+
+## 2026-08-03（52回目）
+### 変更内容
+- [front/src/components/ProtectedRoute.tsx] `RequireRole` で `?dev=1` を検出したら `/name-setup?dev=1` にリダイレクト。`/?dev=1` や `/board?dev=1` など任意の認証済み URL から名前再設定画面に遷移可能
+- [back/src/remind.js] 開発者通知のメッセージをセクション分けして可読性向上（▼ 未提出メンバーへのリマインド / ▼ 管理者へのサマリー送信）
+
+## 2026-08-03（51回目）
+### 変更内容
+- [front/src/lib/db.ts] `upsertMember` で `role === 'admin'` の場合のみ role を書き込む（`user` 時はフィールドなしで merge → 既存の `admin` role を上書きしない。admin→user 降格防止）
+- [front/src/lib/mockStore.ts] 同じ降格防止ロジックをモックにも適用
+- [firestore.rules] `members` update ルールに `resource.data.get('role', '') != 'admin'` を追加（DB レベルでの admin→user 降格防止）
+- [back/src/remind.js] `getAdminNotifyList()` を `{name, lineUserId}[]` を返すよう変更。`notifyAdmins()` が結果リストを返すよう変更。`notifyDeveloper()` を追加し、リマインドジョブ完了時に管理者通知の配信結果（名前・成功/失敗）を `LINE_SELF_USER_ID` に送信
+### LINE_SELF_USER_ID 通知網羅確認
+- `app.js`: Webhook/APIエラー・uncaughtException → `notifySelfError` ✓
+- `clean.js`: 22日自動削除の結果・エラー → `notifyLine` ✓
+- `remind.js`: ジョブ失敗 → `.catch` で通知 ✓ / 管理者通知配信結果 → `notifyDeveloper` ✓（今回追加）
+### デプロイ
+- GitHub (front/): プッシュ済み（Vercel 自動デプロイ）
+- Heroku (back/): プッシュ必要
+- Firestore Rules: デプロイ必要
+
+## 2026-08-03（50回目）
+### 変更内容
+- [front/src/lib/types.ts] `Member` インターフェースに `role?: Role` フィールドを追加（ログイン時に Firebase Auth クレームと同期）
+- [front/src/lib/db.ts] `upsertMember(name, role?)` に `role` パラメータを追加し Firestore に保存。`subscribeMembers` のマッパーに `role` フィールドを追加
+- [front/src/lib/mockStore.ts] モックの `upsertMember` に `role` パラメータを追加
+- [front/src/pages/NameSetupPage.tsx] `upsertMember` 呼び出し2か所に `role ?? undefined` を渡すよう更新（admin ログイン時に `role: 'admin'` が自動保存される）
+- [firestore.rules] `members` の `role` フィールドを自分の Firebase Auth クレームと一致する場合のみ書き込み可に制限（ユーザーによる admin 昇格防止）
+- [back/src/remind.js] `getAdminNotifyIds()` を `members` コレクションの `role === 'admin'` クエリに変更。管理者が一度でもログインすれば自動検出。手動の `config/notify` 設定が不要に。0件時は `LINE_SELF_USER_ID` にフォールバック
+### デプロイ
+- Firestore Rules: `firebase deploy --only firestore:rules` 要
+- GitHub (front/): プッシュ済み（Vercel 自動デプロイ）
+- Heroku (back/): プッシュ必要
+
 ## 2026-08-03（49回目）
 ### 変更内容
 - [back/src/remind.js] 管理者通知先を `LINE_SELF_USER_ID` 環境変数から Firestore `config/notify.adminLineIds` 配列に移行。初回実行時に `LINE_SELF_USER_ID` で自動初期化。複数管理者対応。`notifyAdmins()` で全管理者に一括送信
