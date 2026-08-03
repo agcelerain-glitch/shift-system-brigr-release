@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 2026-08-03（58回目）
+### 変更内容
+- [front/src/lib/db.ts] CreateShiftRequestInput に comment? を追加。respondToShiftRequestInvite の params に userComment? を追加
+- [front/src/pages/AdminShiftPage.tsx] 出勤依頼フォームを全面改善：時間指定時の開始・終了時刻セレクトを追加、任意コメント入力欄を追加（noShiftKey/freeKey/行内フォーム共通）、document.getElementById を廃止してstateベースに変更
+- [front/src/pages/CalendarPage.tsx] InviteNoticeItemにユーザーコメント入力欄を追加。回答送信時に userComment をバックエンドへ渡す
+- [front/src/pages/AdminLinePage.tsx] "pendingの出勤依頼" → "要請中の出勤依頼" に表記変更。グリッドレイアウトを変更：左列=グループ送信①+自分への連絡、右列=グループ送信②（縦長・row-span-2）、下段=個別チャット
+- [back/src/app.js] 出勤依頼回答で作成するconfirmedシフトの件名を「出勤依頼（特別） {name}」→「出勤 {name}」に変更。ユーザーコメント（userComment）をshiftRequestInvitesに保存
+
 ## 2026-08-03（57回目）
 ### 変更内容
 - [front/src/lib/types.ts] ShiftRequest・ShiftRequestInvite型を追加。Shiftにirregular?フラグ追加
