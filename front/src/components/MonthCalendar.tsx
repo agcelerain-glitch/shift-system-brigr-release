@@ -9,6 +9,7 @@ import { TEMPLATE_TIMES } from '../lib/types';
 import {
   getTwoWeekGrid, getWeekStart, getWeekLabel, addDays, todayStr, formatDateJP, displayTime,
 } from '../lib/utils';
+import { PLACE_OPTIONS } from '../lib/config';
 import { Badge } from './ui';
 
 function getTimeLabel(s: Shift): string {
@@ -125,7 +126,7 @@ export function MonthCalendar({
         <div className="space-y-0.5">
           {dayShifts.slice(0, 3).map((s) => {
             const isUnavailable = s.timeType === 'none';
-            const { style, cls } = getShiftStyle(s, memberColors?.[s.memberName]);
+            const { style, cls } = getShiftStyle(s, memberColors?.[s.place ?? '']);
             const label = isUnavailable ? `${s.memberName.split(' ')[0]} 不可` : s.subject;
             return (
               <div key={s.id} className={cls} style={style} title={`${s.memberName} ${s.subject}`}>
@@ -190,13 +191,34 @@ export function MonthCalendar({
 
       {/* 凡例 */}
       <div className="flex items-center gap-3 px-4 py-3 border-t border-gray-100 bg-gray-50 text-xs flex-wrap">
-        <span className="flex items-center gap-1.5"><Badge color="confirmed">確定</Badge></span>
-        {hasPlan && <span className="flex items-center gap-1.5"><Badge color="plan">予定</Badge></span>}
-        {hasReviewed && <span className="flex items-center gap-1.5"><Badge color="reviewed">確認済</Badge></span>}
-        {hasUnavailable && (
-          <span className="flex items-center gap-1.5">
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-400">不可</span>
-          </span>
+        {memberColors ? (
+          // 場所ベース表示時: 場所カラードット
+          <>
+            {PLACE_OPTIONS.map((place) => memberColors[place] && (
+              <span key={place} className="flex items-center gap-1.5">
+                <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: memberColors[place].confirmedBg }} />
+                <span className="text-gray-600">{place}</span>
+              </span>
+            ))}
+            {memberColors[''] && (
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: memberColors[''].confirmedBg }} />
+                <span className="text-gray-500">場所なし</span>
+              </span>
+            )}
+          </>
+        ) : (
+          // メンバーベース / 個人表示時: ステータスバッジ
+          <>
+            <span className="flex items-center gap-1.5"><Badge color="confirmed">確定</Badge></span>
+            {hasPlan && <span className="flex items-center gap-1.5"><Badge color="plan">予定</Badge></span>}
+            {hasReviewed && <span className="flex items-center gap-1.5"><Badge color="reviewed">確認済</Badge></span>}
+            {hasUnavailable && (
+              <span className="flex items-center gap-1.5">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-400">不可</span>
+              </span>
+            )}
+          </>
         )}
         <span className="flex items-center gap-1.5">
           <span className="inline-block w-3 h-3 rounded-full ring-2 ring-today-ring" />
@@ -207,57 +229,80 @@ export function MonthCalendar({
   );
 }
 
-// 日付タップ時の詳細リスト: 確定>削除依頼>確認済>予定、次に場所>帯>名前でソート
+// 日付タップ時の詳細リスト: 場所でグループ化し区切り線表示、グループ内は時間>名前順
 export function DayShiftList({ date, shifts }: { date: string; shifts: Shift[] }) {
-  const sorted = useMemo(
-    () =>
-      [...shifts].sort((a, b) => {
-        const sa = STATUS_ORDER[a.status] ?? 3;
-        const sb = STATUS_ORDER[b.status] ?? 3;
-        if (sa !== sb) return sa - sb;
-        const pc = (a.place ?? '').localeCompare(b.place ?? '', 'ja');
-        if (pc !== 0) return pc;
-        const td = timeSortVal(a) - timeSortVal(b);
-        if (td !== 0) return td;
-        return a.memberName.localeCompare(b.memberName, 'ja');
-      }),
-    [shifts],
-  );
+  const placeGroups = useMemo(() => {
+    const sorted = [...shifts].sort((a, b) => {
+      const pc = (a.place ?? '').localeCompare(b.place ?? '', 'ja');
+      if (pc !== 0) return pc;
+      const sa = STATUS_ORDER[a.status] ?? 3;
+      const sb = STATUS_ORDER[b.status] ?? 3;
+      if (sa !== sb) return sa - sb;
+      const td = timeSortVal(a) - timeSortVal(b);
+      if (td !== 0) return td;
+      return a.memberName.localeCompare(b.memberName, 'ja');
+    });
+    const groups: { place: string; items: Shift[] }[] = [];
+    for (const s of sorted) {
+      const place = s.place ?? '';
+      const last = groups[groups.length - 1];
+      if (last && last.place === place) {
+        last.items.push(s);
+      } else {
+        groups.push({ place, items: [s] });
+      }
+    }
+    return groups;
+  }, [shifts]);
+
+  const renderShift = (s: Shift) => {
+    const isUnavailable = s.timeType === 'none';
+    const timeLabel = getTimeLabel(s);
+    return (
+      <div key={s.id} className="flex items-start gap-2 p-3 rounded-lg bg-gray-50">
+        <Badge color={
+          isUnavailable                   ? 'gray'      :
+          s.status === 'delete_requested' ? 'red'       :
+          s.status === 'confirmed'        ? 'confirmed' :
+          s.status === 'reviewed'         ? 'reviewed'  : 'plan'
+        }>
+          {isUnavailable ? '不可' :
+            s.status === 'delete_requested' ? '削除依頼' :
+            s.status === 'confirmed'        ? '確定' :
+            s.status === 'reviewed'         ? '確認済' : '予定'}
+        </Badge>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-gray-900">
+            {isUnavailable ? s.memberName : s.subject}
+          </p>
+          {!isUnavailable && timeLabel && (
+            <p className="text-xs text-gray-500">{timeLabel}</p>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-2">
       <p className="text-sm font-medium text-gray-700">{formatDateJP(date)} のシフト</p>
-      {sorted.length === 0 ? (
+      {placeGroups.length === 0 ? (
         <p className="text-sm text-gray-400">この日のシフトはありません</p>
       ) : (
-        sorted.map((s) => {
-          const isUnavailable = s.timeType === 'none';
-          const timeLabel = getTimeLabel(s);
-          return (
-            <div key={s.id} className="flex items-start gap-2 p-3 rounded-lg bg-gray-50">
-              <Badge color={
-                isUnavailable          ? 'gray'      :
-                s.status === 'delete_requested' ? 'red'  :
-                s.status === 'confirmed'        ? 'confirmed' :
-                s.status === 'reviewed'         ? 'reviewed'  : 'plan'
-              }>
-                {isUnavailable ? '不可' :
-                  s.status === 'delete_requested' ? '削除依頼' :
-                  s.status === 'confirmed'        ? '確定' :
-                  s.status === 'reviewed'         ? '確認済' : '予定'}
-              </Badge>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900">
-                  {isUnavailable ? s.memberName : s.subject}
-                </p>
-                {!isUnavailable && timeLabel && (
-                  <p className="text-xs text-gray-500">{timeLabel}</p>
-                )}
-                {s.place && <p className="text-xs text-gray-500">場所: {s.place}</p>}
-              </div>
+        placeGroups.map((group) => (
+          <div key={group.place}>
+            <div className="flex items-center gap-2 my-2">
+              <div className="flex-1 h-px bg-gray-200" />
+              <span className="text-xs font-semibold text-gray-500 px-1 shrink-0">
+                {group.place || '場所未設定'}
+              </span>
+              <div className="flex-1 h-px bg-gray-200" />
             </div>
-          );
-        })
+            <div className="space-y-1.5">
+              {group.items.map(renderShift)}
+            </div>
+          </div>
+        ))
       )}
     </div>
   );

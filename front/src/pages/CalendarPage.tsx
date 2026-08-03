@@ -9,6 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Modal, Select, Button, Card } from '../components/ui';
 import { formatDateJP, displayTime } from '../lib/utils';
 import { respondToShiftRequestInvite } from '../lib/db';
+import type { MemberColor } from '../components/MonthCalendar';
 import { useToast } from '../contexts/ToastContext';
 import { Megaphone, BellPlus, ChevronDown, ChevronUp, CheckCircle2, XCircle, Clock, MapPin, MessageSquare, AlertTriangle } from 'lucide-react';
 import type { ShiftRequestInvite } from '../lib/types';
@@ -30,17 +31,35 @@ const TIME_OPTIONS: string[] = [...BASE_OPTIONS, ...NEXT_DAY_OPTIONS];
 
 const toMinutes = (t: string): number => { const [h, m] = t.split(':').map(Number); const adj = h < 9 ? h + 24 : h; return adj * 60 + m; };
 
-function memberColorForIndex(i: number, total: number): MemberColor {
-  const hue = Math.round((i * 360) / Math.max(total, 1)) % 360;
-  return {
-    planBg: `hsl(${hue}, 55%, 88%)`,
-    planText: `hsl(${hue}, 60%, 28%)`,
-    confirmedBg: `hsl(${hue}, 65%, 50%)`,
-    confirmedText: 'white',
-    reviewedBg: 'rgb(235, 235, 235)',
-    reviewedText: 'rgb(150, 150, 150)',
-  };
-}
+// 場所ごとの固定色マップ（全体表示時にカレンダーセルへ適用）
+// キーは PLACE_OPTIONS の各場所名 + '' (場所なし)
+const PLACE_COLOR_MAP: Record<string, MemberColor> = {
+  'ブリジャール': {
+    planBg: 'hsl(152, 55%, 88%)', planText: 'hsl(152, 60%, 24%)',
+    confirmedBg: 'hsl(152, 58%, 42%)', confirmedText: 'white',
+    reviewedBg: 'rgb(235,235,235)', reviewedText: 'rgb(150,150,150)',
+  },
+  'ルチア': {
+    planBg: 'hsl(210, 55%, 88%)', planText: 'hsl(210, 60%, 28%)',
+    confirmedBg: 'hsl(210, 65%, 48%)', confirmedText: 'white',
+    reviewedBg: 'rgb(235,235,235)', reviewedText: 'rgb(150,150,150)',
+  },
+  'セラス': {
+    planBg: 'hsl(265, 55%, 88%)', planText: 'hsl(265, 60%, 30%)',
+    confirmedBg: 'hsl(265, 58%, 52%)', confirmedText: 'white',
+    reviewedBg: 'rgb(235,235,235)', reviewedText: 'rgb(150,150,150)',
+  },
+  'ルミ・ベガ': {
+    planBg: 'hsl(38, 70%, 88%)', planText: 'hsl(38, 75%, 28%)',
+    confirmedBg: 'hsl(38, 78%, 50%)', confirmedText: 'white',
+    reviewedBg: 'rgb(235,235,235)', reviewedText: 'rgb(150,150,150)',
+  },
+  '': {
+    planBg: 'hsl(340, 55%, 88%)', planText: 'hsl(340, 60%, 28%)',
+    confirmedBg: 'hsl(340, 58%, 50%)', confirmedText: 'white',
+    reviewedBg: 'rgb(235,235,235)', reviewedText: 'rgb(150,150,150)',
+  },
+};
 
 type ConfirmType = 'accepted' | 'rejected' | 'adjusted' | null;
 
@@ -219,19 +238,12 @@ function InviteNoticeItem({ invite, myName, onDone }: {
 }
 
 export function CalendarPage() {
-  const { shifts, members, shiftRequestInvites } = useData();
+  const { shifts, shiftRequestInvites } = useData();
   const { name: myName } = useAuth();
   const toast = useToast();
   const [selected, setSelected] = useState<string | null>(null);
   const [filterName, setFilterName] = useState<'self' | 'all'>('self');
   const [respondedIds, setRespondedIds] = useState<Set<string>>(new Set());
-
-  // メンバーリスト: Firestoreのmembersに加え、shiftsに存在する名前も追加
-  const memberNames = useMemo(() => {
-    const fromMembers = members.map((m) => m.name);
-    const fromShifts = [...new Set(shifts.map((s) => s.memberName))];
-    return [...new Set([...fromMembers, ...fromShifts])].sort((a, b) => a.localeCompare(b, 'ja'));
-  }, [members, shifts]);
 
   const filtered = useMemo(() => {
     if (filterName === 'self' && myName) return shifts.filter((s) => s.memberName === myName);
@@ -243,14 +255,8 @@ export function CalendarPage() {
     [filtered, selected],
   );
 
-  const memberColors = useMemo<Record<string, MemberColor> | undefined>(() => {
-    if (filterName !== 'all') return undefined;
-    const map: Record<string, MemberColor> = {};
-    memberNames.forEach((name, i) => {
-      map[name] = memberColorForIndex(i, memberNames.length);
-    });
-    return map;
-  }, [filterName, memberNames]);
+  // 全体表示時: 場所ベースの固定色マップを渡す / 個人表示時: undefined（デフォルト色）
+  const memberColors = filterName === 'all' ? PLACE_COLOR_MAP : undefined;
 
   // 自分宛ての未回答出勤依頼
   const myPendingInvites = useMemo(
