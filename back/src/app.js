@@ -143,6 +143,215 @@ app.post('/line/self', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// 管理者全員に通知（role=adminのmembersのlineUserId + LINE_SELF_USER_ID）
+app.post('/line/notify-admins', async (req, res, next) => {
+  try {
+    const { message } = req.body;
+    if (!message) return res.status(400).json({ ok: false, message: 'message required' });
+    const db = getDb();
+    if (!db) return res.status(500).json({ ok: false, message: 'Firebase未接続' });
+
+    const adminSnap = await db.collection('members').where('role', '==', 'admin').get();
+    const adminLineIds = adminSnap.docs.map(d => d.data().lineUserId).filter(Boolean);
+
+    // 開発者（LINE_SELF_USER_ID）も含める
+    const selfId = process.env.LINE_SELF_USER_ID;
+    if (selfId && !adminLineIds.includes(selfId)) adminLineIds.push(selfId);
+
+    if (adminLineIds.length === 0) return res.json({ ok: true, message: '通知対象なし（LINE未登録）' });
+
+    await Promise.allSettled(
+      adminLineIds.map(uid =>
+        client.pushMessage({ to: uid, messages: [{ type: 'text', text: message }] })
+      )
+    );
+    res.json({ ok: true, message: `${adminLineIds.length}名に通知しました` });
+  } catch (e) { next(e); }
+});
+
+// 出勤依頼の個別送信（shiftRequestInvitesをFirestoreに作成 + LINE通知）
+app.post('/shift-request/send-invites', async (req, res, next) => {
+  try {
+    const { requestId, date, place, timeLabel, targetMembers, comment, sendToGroup, groupMessage } = req.body;
+    if (!requestId || !targetMembers || !Array.isArray(targetMembers)) {
+      return res.status(400).json({ ok: false, message: '必須パラメータが不足しています' });
+    }
+    const db = getDb();
+    if (!db) return res.status(500).json({ ok: false, message: 'Firebase未接続' });
+
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    const batch = db.batch();
+
+    // shiftRequestInvitesを一括作成
+    for (const m of targetMembers) {
+      const ref = db.collection('shiftRequestInvites').doc();
+      const data = {
+        requestId,
+        date: date ?? '',
+        place: place ?? '',
+        timeLabel: timeLabel ?? '',
+        memberName: m.memberName,
+        lineUserId: m.lineUserId,
+        response: 'pending',
+        sentAt: now,
+      };
+      if (comment) data.comment = comment;
+      batch.set(ref, data);
+    }
+    await batch.commit();
+
+    // 個別にLINE DM送信
+    const dmText = [
+      '【出勤依頼が届いています】',
+      `${date} ${place} ${timeLabel}`,
+      comment ? `\nコメント: ${comment}` : '',
+      '\nウェブアプリの「お知らせ」から回答してください。',
+    ].join('\n').trim();
+
+    const dmTasks = targetMembers.map(m =>
+      client.pushMessage({ to: m.lineUserId, messages: [{ type: 'text', text: dmText }] })
+    );
+
+    // グループ送信（任意）
+    if (sendToGroup && groupMessage) {
+      const groupId = await getGroupId();
+      if (groupId) {
+        dmTasks.push(client.pushMessage({ to: groupId, messages: [{ type: 'text', text: groupMessage }] }));
+      }
+    }
+
+    await Promise.allSettled(dmTasks);
+    res.json({ ok: true, message: `${targetMembers.length}名に送信しました` });
+  } catch (e) { next(e); }
+});
+
+// 出勤依頼への回答処理（confirmedシフト作成 + 管理者全員LINE通知）
+app.post('/shift-request/respond', async (req, res, next) => {
+  try {
+    const { inviteId, requestId, memberName, response, adjustedTimeStart, adjustedTimeEnd } = req.body;
+    if (!inviteId || !requestId || !memberName || !response) {
+      return res.status(400).json({ ok: false, message: '必須パラメータが不足しています' });
+    }
+
+    const db = getDb();
+    if (!db) return res.status(500).json({ ok: false, message: 'Firebase未接続' });
+
+    const requestRef = db.collection('shiftRequests').doc(requestId);
+    const inviteRef = db.collection('shiftRequestInvites').doc(inviteId);
+    let resultShiftId = null;
+    let result;
+
+    if (response === 'accepted' || response === 'adjusted') {
+      await db.runTransaction(async (tx) => {
+        const requestSnap = await tx.get(requestRef);
+        const inviteSnap = await tx.get(inviteRef);
+
+        if (!requestSnap.exists) throw new Error('REQUEST_NOT_FOUND');
+        if (!inviteSnap.exists) throw new Error('INVITE_NOT_FOUND');
+
+        const requestData = requestSnap.data();
+        const inviteData = inviteSnap.data();
+
+        if (inviteData.response !== 'pending') throw new Error('ALREADY_RESPONDED');
+        if (requestData.acceptedCount >= requestData.requiredCount) throw new Error('FULL');
+
+        const newCount = requestData.acceptedCount + 1;
+        tx.update(requestRef, {
+          acceptedCount: newCount,
+          status: newCount >= requestData.requiredCount ? 'closed' : 'pending',
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        // confirmed シフトを直接作成（Firebase Admin SDK）
+        const shiftRef = db.collection('shifts').doc();
+        resultShiftId = shiftRef.id;
+
+        const shiftData = {
+          memberName,
+          date: requestData.date,
+          status: 'confirmed',
+          place: requestData.place,
+          irregular: true,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          version: 1,
+          subject: `出勤依頼（特別） ${memberName}`,
+        };
+
+        if (response === 'adjusted' && adjustedTimeStart && adjustedTimeEnd) {
+          shiftData.timeType = 'time';
+          shiftData.timeStart = adjustedTimeStart;
+          shiftData.timeEnd = adjustedTimeEnd;
+        } else if (requestData.timeType === 'template' && requestData.template) {
+          shiftData.timeType = 'template';
+          shiftData.template = requestData.template;
+        } else {
+          shiftData.timeType = 'time';
+          shiftData.timeStart = requestData.timeStart ?? '20:00';
+          shiftData.timeEnd = requestData.timeEnd ?? '02:00';
+        }
+
+        tx.set(shiftRef, shiftData);
+
+        const inviteUpdate = {
+          response,
+          respondedAt: admin.firestore.FieldValue.serverTimestamp(),
+          resultShiftId,
+        };
+        if (adjustedTimeStart) inviteUpdate.adjustedTimeStart = adjustedTimeStart;
+        if (adjustedTimeEnd) inviteUpdate.adjustedTimeEnd = adjustedTimeEnd;
+        tx.update(inviteRef, inviteUpdate);
+      });
+      result = 'accepted';
+    } else if (response === 'rejected') {
+      await inviteRef.update({
+        response: 'rejected',
+        respondedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      result = 'rejected';
+    }
+
+    // 管理者全員 + 開発者にLINE通知
+    try {
+      const requestSnap = await requestRef.get();
+      const requestData = requestSnap.exists ? requestSnap.data() : {};
+      const inviteSnap = await inviteRef.get();
+      const inviteData = inviteSnap.exists ? inviteSnap.data() : {};
+
+      const remaining = Math.max(0, (requestData.requiredCount ?? 0) - (requestData.acceptedCount ?? 0));
+      const responseLabel = (response === 'accepted' || response === 'adjusted') ? '出勤します' : '不可です';
+      const dateLabel = inviteData.date ?? requestData.date ?? '';
+      const placeLabel = inviteData.place ?? requestData.place ?? '';
+      const timeLabelVal = inviteData.timeLabel ?? '';
+
+      const notifyMsg = `【出勤依頼結果通知】\n${dateLabel} ${placeLabel} ${timeLabelVal}\n${memberName}: ${responseLabel}\n残り${remaining}人`;
+
+      const adminSnap = await db.collection('members').where('role', '==', 'admin').get();
+      const adminLineIds = adminSnap.docs.map(d => d.data().lineUserId).filter(Boolean);
+      const selfId = process.env.LINE_SELF_USER_ID;
+      if (selfId && !adminLineIds.includes(selfId)) adminLineIds.push(selfId);
+
+      await Promise.allSettled(
+        adminLineIds.map(uid =>
+          client.pushMessage({ to: uid, messages: [{ type: 'text', text: notifyMsg }] })
+        )
+      );
+    } catch (notifyErr) {
+      // 通知失敗はログのみ（メイン処理には影響させない）
+      console.error('[shift-request/respond] 管理者通知失敗:', notifyErr?.message);
+      await notifySelfError('shift-request/respond 管理者通知', response, notifyErr?.message ?? String(notifyErr)).catch(() => {});
+    }
+
+    res.json({ ok: true, result, message: '回答を送信しました', shiftId: resultShiftId });
+  } catch (e) {
+    const msg = e?.message ?? String(e);
+    if (msg === 'FULL') return res.json({ ok: false, result: 'full', message: '定員に達しました（先着順）' });
+    if (msg === 'ALREADY_RESPONDED') return res.json({ ok: false, result: 'already', message: '既に回答済みです' });
+    if (msg === 'REQUEST_NOT_FOUND') return res.status(404).json({ ok: false, message: '出勤依頼が見つかりません' });
+    next(e);
+  }
+});
+
 // 個別チャット連絡
 app.post('/line/dm', async (req, res, next) => {
   try {

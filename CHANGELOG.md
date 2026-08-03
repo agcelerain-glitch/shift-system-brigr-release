@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 2026-08-03（57回目）
+### 変更内容
+- [front/src/lib/types.ts] ShiftRequest・ShiftRequestInvite型を追加。Shiftにirregular?フラグ追加
+- [front/src/lib/db.ts] subscribeShiftRequests・subscribeShiftRequestInvites・createShiftRequest・deleteShiftRequest・sendShiftRequestInvites・respondToShiftRequestInvite 関数を追加
+- [front/src/contexts/DataContext.tsx] shiftRequests・shiftRequestInvites のリアルタイム購読を追加
+- [front/src/pages/AdminShiftPage.tsx] 日付プレビューのピボットテーブルに出勤依頼チェックボックス（場所×時間帯ごとに必要人数指定）を追加。全解除ボタン実装
+- [front/src/pages/AdminLinePage.tsx] 出勤依頼送信セクション追加。pending依頼一覧からチェック選択→複数ユーザー選択→グループ送信オプション→コメント入力→送信
+- [front/src/pages/CalendarPage.tsx] カレンダー最上部に「お知らせ」セクション追加。出勤依頼通知→開く→出勤/不可/調整して出勤ボタン（二重確認付き）
+- [back/src/app.js] POST /line/notify-admins（管理者全員通知）、POST /shift-request/send-invites（invite作成+LINE送信）、POST /shift-request/respond（ユーザー回答処理+confirmedシフト自動作成+管理者通知）エンドポイントを追加
+- [firestore.rules] shiftRequests・shiftRequestInvites コレクションのセキュリティルール追加
+
 ## 2026-08-03（56回目）
 ### 変更内容（コード変更なし・デプロイ構造の修正）
 - [Heroku デプロイ方式を修正] `git push heroku main`（フル repo プッシュ）→ `git subtree push --prefix back heroku main` に変更

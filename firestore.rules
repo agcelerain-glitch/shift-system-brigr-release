@@ -14,8 +14,17 @@ service cloud.firestore {
     }
 
     // 名簿: 認証済みは読取/作成/更新可、削除はadminのみ
+    // roleフィールドは自分のFirebase Authクレームと一致する値のみ書き込み可（昇格防止）
     match /members/{memberId} {
-      allow read, create, update: if isUserOrAdmin();
+      allow read: if isUserOrAdmin();
+      allow create: if isUserOrAdmin() &&
+        (!('role' in request.resource.data) ||
+          request.resource.data.role == request.auth.token.role);
+      allow update: if isUserOrAdmin() &&
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']) ||
+          // roleが変更される場合: 自分のクレームと一致 かつ 既存がadminでない（admin→user降格を防止）
+          (request.resource.data.role == request.auth.token.role &&
+           resource.data.get('role', '') != 'admin'));
       allow delete: if isAdmin();
     }
 
@@ -49,10 +58,31 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // 削除済み掲示板: adminのみ読み書き（ソフトデリート用）
+    match /boardPublicDeleted/{docId} {
+      allow read, write: if isAdmin();
+    }
+    match /boardPrivateDeleted/{docId} {
+      allow read, write: if isAdmin();
+    }
+
     // システム設定（LINEグループIDなど）: userは読取、adminのみ書込
     match /config/{docId} {
       allow read: if isUserOrAdmin();
       allow write: if isAdmin();
+    }
+
+    // 出勤依頼: adminが作成・更新、認証済みが読取
+    match /shiftRequests/{docId} {
+      allow read: if isUserOrAdmin();
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // 出勤依頼の送信記録: バックエンド(AdminSDK)が書込、認証済みが読取
+    match /shiftRequestInvites/{docId} {
+      allow read: if isUserOrAdmin();
+      allow write: if false; // バックエンドのFirebase Admin SDKのみ書込可
     }
   }
 }
