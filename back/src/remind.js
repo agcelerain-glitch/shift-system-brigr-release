@@ -103,28 +103,27 @@ function getNextWeekRange() {
 // ─── 管理者通知先リスト（membersコレクションから自動取得） ─────────────
 
 /**
- * members コレクションから role === 'admin' かつ lineUserId が設定されているメンバーの
- * lineUserId を取得する。管理者がログインした時点で自動登録されるため手動設定不要。
+ * members コレクションから role === 'admin' かつ lineUserId が設定されているメンバーを
+ * { name, lineUserId }[] として返す。管理者がログインした時点で自動登録されるため手動設定不要。
  * 取得0件の場合は LINE_SELF_USER_ID にフォールバック。
  */
-async function getAdminNotifyIds() {
+async function getAdminNotifyList() {
   const selfId = process.env.LINE_SELF_USER_ID ?? null;
 
   try {
     const snap = await db.collection('members').where('role', '==', 'admin').get();
-    const ids = snap.docs
-      .map((d) => d.data().lineUserId)
-      .filter(Boolean);
-    if (ids.length > 0) {
-      console.log(`[remind] 管理者通知先: ${ids.length}件 (members.role=admin)`);
-      return ids;
+    const admins = snap.docs
+      .map((d) => ({ name: d.data().name, lineUserId: d.data().lineUserId }))
+      .filter((a) => a.lineUserId);
+    if (admins.length > 0) {
+      console.log(`[remind] 管理者通知先: ${admins.length}件 (members.role=admin) — ${admins.map((a) => a.name).join('・')}`);
+      return admins;
     }
-    // 管理者がまだログイン登録していない場合は LINE_SELF_USER_ID にフォールバック
     console.warn('[remind] members に role=admin のメンバーなし。LINE_SELF_USER_ID にフォールバック');
-    return selfId ? [selfId] : [];
+    return selfId ? [{ name: '開発者(fallback)', lineUserId: selfId }] : [];
   } catch (e) {
     console.warn('[remind] members 読み取り失敗、フォールバック:', e?.message);
-    return selfId ? [selfId] : [];
+    return selfId ? [{ name: '開発者(fallback)', lineUserId: selfId }] : [];
   }
 }
 
@@ -147,12 +146,31 @@ async function pushLine(client, to, text) {
   }
 }
 
-// 管理者全員にサマリーを送信
-async function notifyAdmins(client, adminIds, text) {
-  if (DRY_RUN || adminIds.length === 0) return;
-  const results = await Promise.allSettled(adminIds.map((id) => pushLine(client, id, text)));
-  const ok = results.filter((r) => r.status === 'fulfilled' && r.value).length;
-  console.log(`[remind] 管理者サマリー送信: ${ok}/${adminIds.length}件成功`);
+/**
+ * 管理者全員にサマリーを送信し、結果 { name, lineUserId, ok }[] を返す。
+ */
+async function notifyAdmins(client, adminList, text) {
+  if (DRY_RUN || adminList.length === 0) return [];
+  const results = await Promise.allSettled(adminList.map((a) => pushLine(client, a.lineUserId, text)));
+  return results.map((r, i) => ({
+    name: adminList[i].name,
+    lineUserId: adminList[i].lineUserId,
+    ok: r.status === 'fulfilled' && r.value,
+  }));
+}
+
+/**
+ * LINE_SELF_USER_ID（開発者）にモニタリング通知を送信する。
+ * dry-run 時はコンソール出力のみ。
+ */
+async function notifyDeveloper(client, text) {
+  const selfId = process.env.LINE_SELF_USER_ID;
+  if (!selfId) return;
+  if (DRY_RUN) {
+    console.log(`[remind][DRY-RUN] 開発者通知(スキップ):\n${text}`);
+    return;
+  }
+  await pushLine(client, selfId, text);
 }
 
 // ─── メイン ──────────────────────────────────────────────
@@ -174,9 +192,9 @@ async function main() {
   const lineClient = getLineClient();
 
   // 管理者通知先を Firestore から取得
-  const adminIds = await getAdminNotifyIds();
-  if (adminIds.length === 0) {
-    console.warn('[remind] 管理者通知先が設定されていません (config/notify.adminLineIds が空)');
+  const adminList = await getAdminNotifyList();
+  if (adminList.length === 0) {
+    console.warn('[remind] 管理者通知先が設定されていません');
   }
 
   // 1. 全メンバー取得
@@ -201,7 +219,12 @@ async function main() {
 
   if (unsubmitted.length === 0) {
     console.log('[remind] 全員提出済み — リマインド不要');
-    await notifyAdmins(lineClient, adminIds, `[シフトリマインド]\n来週 ${label} は全員提出済みです ✅`);
+    const allDoneMsg = `[シフトリマインド]\n来週 ${label} は全員提出済みです ✅`;
+    const allDoneResults = await notifyAdmins(lineClient, adminList, allDoneMsg);
+    const allDoneOk = allDoneResults.filter((r) => r.ok).length;
+    await notifyDeveloper(lineClient,
+      `[開発者通知] リマインドジョブ完了\n${label}\n\n✅ 全員提出済み\n\n管理者通知: ${allDoneOk}/${adminList.length}件成功\n${allDoneResults.map((r) => `${r.ok ? '✅' : '❌'} ${r.name}`).join('\n')}`
+    );
     return;
   }
 
@@ -245,9 +268,22 @@ async function main() {
   ];
   const summary = summaryParts.join('\n');
   console.log(`[remind] 管理者サマリー:\n${summary}`);
-  await notifyAdmins(lineClient, adminIds, summary);
+  const notifyResults = await notifyAdmins(lineClient, adminList, summary);
+  const notifyOk = notifyResults.filter((r) => r.ok).length;
 
-  console.log(`[remind] ${mode}完了 — LINE送信${DRY_RUN ? '(dry)' : `${sentCount}件`} / 管理者通知${adminIds.length}件 / LINE未登録${withoutLine.length}名`);
+  // 6. 開発者（LINE_SELF_USER_ID）に管理者通知の配信結果を送信
+  const devParts = [
+    `[開発者通知] リマインドジョブ完了`,
+    `${label}`,
+    '',
+    `管理者通知: ${notifyOk}/${adminList.length}件成功`,
+    ...notifyResults.map((r) => `${r.ok ? '✅' : '❌'} ${r.name}`),
+    '',
+    `未提出: ${unsubmitted.length}名 / LINE送信: ${DRY_RUN ? '(dry)' : `${sentCount}件`} / LINE未登録: ${withoutLine.length}名`,
+  ];
+  await notifyDeveloper(lineClient, devParts.join('\n'));
+
+  console.log(`[remind] ${mode}完了 — LINE送信${DRY_RUN ? '(dry)' : `${sentCount}件`} / 管理者通知${notifyOk}/${adminList.length}件 / LINE未登録${withoutLine.length}名`);
 }
 
 main().catch(async (e) => {
