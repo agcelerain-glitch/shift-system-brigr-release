@@ -19,6 +19,7 @@ export interface Member {
   createdAt: number; // 記入日
   updatedAt: number; // 最終更新日
   lineUserId?: string;
+  role?: Role; // ログイン時のFirebase Authクレームと同期（通知用・情報目的のみ）
 }
 
 // shifts: シフト申請・確定

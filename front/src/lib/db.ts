@@ -19,7 +19,7 @@ import {
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured, API_BASE_URL } from './firebase';
 import { mockStore } from './mockStore';
-import type { Shift, Member, BoardPublic, BoardPrivate, ApprovalLog, DeletedBoardPublic, DeletedBoardPrivate, ShiftStatus, TimeType, TemplateCode } from './types';
+import type { Shift, Member, BoardPublic, BoardPrivate, ApprovalLog, DeletedBoardPublic, DeletedBoardPrivate, ShiftStatus, TimeType, TemplateCode, Role } from './types';
 
 const now = () => Date.now();
 const toMs = (t: unknown): number => {
@@ -47,14 +47,15 @@ export function subscribeMembers(cb: (items: Member[]) => void): () => void {
   if (!isFirebaseConfigured) return mockStore.subscribe('members', cb);
   return subscribeReal<Member>(
     query(collection(db!, 'members')),
-    (r) => ({ id: r.id as string, name: r.name as string, createdAt: toMs(r.createdAt), updatedAt: toMs(r.updatedAt), lineUserId: r.lineUserId as string | undefined }) as Member,
+    (r) => ({ id: r.id as string, name: r.name as string, createdAt: toMs(r.createdAt), updatedAt: toMs(r.updatedAt), lineUserId: r.lineUserId as string | undefined, role: r.role as Role | undefined }) as Member,
     cb,
   );
 }
 
-export async function upsertMember(name: string): Promise<void> {
-  const payload = { name, updatedAt: serverTimestamp() };
-  if (!isFirebaseConfigured) return mockStore.upsertMember(name);
+export async function upsertMember(name: string, role?: Role): Promise<void> {
+  const payload: Record<string, unknown> = { name, updatedAt: serverTimestamp() };
+  if (role) payload.role = role;
+  if (!isFirebaseConfigured) return mockStore.upsertMember(name, role);
   // nameで既存を探してupsert
   const q = query(collection(db!, 'members'), where('name', '==', name));
   const { getDocs } = await import('firebase/firestore');

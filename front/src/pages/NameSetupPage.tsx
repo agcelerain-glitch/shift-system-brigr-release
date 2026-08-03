@@ -31,7 +31,7 @@ export function NameSetupPage() {
     let cancelled = false;
     (async () => {
       try {
-        await upsertMember(savedName);
+        await upsertMember(savedName, role ?? undefined);
       } catch {
         // ネットワーク不安定時も遷移を優先（次回ログイン時に更新される）
       }
@@ -61,7 +61,7 @@ export function NameSetupPage() {
     if (!trimmed) { toast.show('名前を入力してください', 'error'); return; }
     setSaving(true);
     try {
-      await upsertMember(trimmed);
+      await upsertMember(trimmed, role ?? undefined);
     } catch (err) {
       toast.show(`名前の保存に失敗しました: ${(err as Error).message}`, 'error');
       setSaving(false);

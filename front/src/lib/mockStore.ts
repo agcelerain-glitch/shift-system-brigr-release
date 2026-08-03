@@ -106,12 +106,13 @@ export const mockStore = {
     return () => set.delete(cb as Listener<unknown>);
   },
 
-  upsertMember(name: string) {
+  upsertMember(name: string, role?: Member['role']) {
     const existing = state.members.find((m) => m.name === name);
     if (existing) {
       existing.updatedAt = Date.now();
+      if (role) existing.role = role;
     } else {
-      state.members.push({ id: `m${Date.now()}`, name, createdAt: Date.now(), updatedAt: Date.now() });
+      state.members.push({ id: `m${Date.now()}`, name, createdAt: Date.now(), updatedAt: Date.now(), role });
     }
     notify('members');
   },
