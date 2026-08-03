@@ -1,5 +1,25 @@
 # CHANGELOG
 
+## 2026-08-03（56回目）
+### 変更内容（コード変更なし・デプロイ構造の修正）
+- [Heroku デプロイ方式を修正] `git push heroku main`（フル repo プッシュ）→ `git subtree push --prefix back heroku main` に変更
+  - フル push 時: Heroku がルートの package.json（firebase-admin のみ）を参照 → "start" スクリプトなし → H10
+  - subtree push 時: Heroku が back/ をルートとして認識 → Procfile / package.json が正しく参照される
+- [Heroku v23] `Procfile declares types -> web` ✅ / Node 22.x ✅ / 244 packages ✅ / 0 vulnerabilities ✅
+### 根本原因の詳細（H10連鎖クラッシュの経緯）
+1. `git push heroku main --force`（過去セッション）でフル repo が Heroku に送られ、デプロイ構造が壊れた
+2. Heroku が root package.json（start スクリプトなし）を参照 → web dyno が起動不能
+3. 個別チャット送信時に LINE API エラー → 旧コードの unhandledRejection → process.exit(1) → H10
+4. v22 デプロイ（try-catch 修正）もフル push のため構造問題が残り → "npm error Missing script: start"
+5. v23（subtree push）で全て解消
+### 今後の Heroku バックデプロイ手順（必読）
+```
+cd shiftsystem_bri_release（ルート）
+git subtree push --prefix back heroku main
+```
+### デプロイ
+- Heroku (back/): v23 プッシュ済み（subtree push）
+
 ## 2026-08-03（55回目）
 ### 変更内容
 - [back/src/app.js] 全 async ルートハンドラ（/line/group/shift, /line/group/position, /line/self, /line/dm）に try-catch を追加し `next(e)` でエラーミドルウェアに渡す。LINE API エラー時に unhandledRejection → process.exit(1) → H10 クラッシュとなっていたバグを修正
