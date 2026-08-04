@@ -576,10 +576,11 @@ export function AdminLinePage() {
 
           {/* 場所プルダウン（全体で1つ） */}
           <div className="mb-3">
-            <label className="block text-xs font-medium text-gray-600 mb-1">場所</label>
+            <label className="block text-xs font-semibold text-purple-700 mb-1">場所 <span className="text-purple-400 font-normal">（必須）</span></label>
             <Select
               value={posPlace}
               onChange={(e) => { setPosPlace(e.target.value); setPosPlaceCustom(''); }}
+              className="border-2 border-purple-400 bg-purple-50 focus:ring-purple-400"
             >
               <option value="">（場所を選択）</option>
               {PLACE_OPTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
@@ -831,6 +832,9 @@ export function AdminLinePage() {
 
           {inviteSectionOpen && (
             <div className="space-y-4">
+              <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                ⚠ 出勤依頼は確定済みのメンバーにも送付されます。送信前に対象メンバーをご確認ください。
+              </p>
               {/* ① 出勤依頼を選択 */}
               <div>
                 <p className="text-xs font-semibold text-gray-600 mb-2">① 送信する依頼を選択</p>
