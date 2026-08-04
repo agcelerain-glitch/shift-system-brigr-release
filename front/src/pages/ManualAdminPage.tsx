@@ -5,7 +5,7 @@ import { AdminLayout } from '../components/AdminLayout';
 import { Card } from '../components/ui';
 import {
   ClipboardList, Send, CheckCircle2, XCircle, Sliders,
-  RotateCcw, Users, Lock, Megaphone, Trash2,
+  RotateCcw, Users, Lock, Megaphone, Trash2, BellPlus,
 } from 'lucide-react';
 
 type IconType = typeof ClipboardList;
@@ -19,9 +19,12 @@ function SectionCard({
   icon: IconType;
   title: string;
   children: ReactNode;
-  accent?: 'slate' | 'rose';
+  accent?: 'slate' | 'rose' | 'purple';
 }) {
-  const iconCls = accent === 'rose' ? 'bg-rose-100 text-rose-600' : 'bg-slate-100 text-slate-600';
+  const iconCls =
+    accent === 'rose' ? 'bg-rose-100 text-rose-600' :
+    accent === 'purple' ? 'bg-purple-100 text-purple-600' :
+    'bg-slate-100 text-slate-600';
   return (
     <Card className="p-5">
       <div className="flex items-start gap-3">
@@ -53,7 +56,8 @@ export function ManualAdminPage() {
             <li>上部フィルターで<strong>予定・確定・確認済・不可・削除依頼</strong>を絞り込み（初期表示：予定＋削除依頼）</li>
             <li><strong>日付・曜日・場所・時間・名前・人数</strong>の並び替えタブで切り替え</li>
             <li>キーワード検索（名前・件名・場所に対応）</li>
-            <li>ページ上部の<strong>週間サマリー</strong>で今後7日間の人数を一目確認</li>
+            <li>ページ上部の<strong>18日間サマリー</strong>で今後の人数を一目確認。日付をタップすると場所・時間帯・名前の詳細プレビューがページ内に展開</li>
+            <li>プレビュー内の名前バッジをタップすると<strong>「調整」マーク</strong>（オレンジ）を付けられます。複数人をマーキングして復元ログと組み合わせて使うと便利です</li>
           </ul>
         </SectionCard>
 
@@ -98,11 +102,32 @@ export function ManualAdminPage() {
           </span>
         </SectionCard>
 
-        <SectionCard icon={RotateCcw} title="復元（7日以内）">
+        <SectionCard icon={RotateCcw} title="復元ログ（7日以内）">
           {/* 開発メモ: approvalLogsコレクションにbeforeStateスナップショットを保存 */}
           <strong>許可・否認・調整</strong>のたびに変更前の状態が自動で保存されます。
           「<strong>復元ログ</strong>」ボタンから<strong>7日以内</strong>のものは元の状態に戻せます。
-          誤操作の保険として活用してください。
+          <ul className="mt-1.5 space-y-0.5 list-disc list-inside text-xs text-gray-500">
+            <li>名前・場所・日付で<strong>キーワード検索</strong>が可能</li>
+            <li>日付・場所・名前・<strong>調整対象</strong>でソート可能（「調整」マーク付きのログを先頭に集められます）</li>
+          </ul>
+        </SectionCard>
+
+        <SectionCard icon={BellPlus} title="出勤依頼" accent="purple">
+          人手が必要な日に、特定のメンバーへ<strong>出勤依頼</strong>を送る機能です。2ステップで使います。
+          <ol className="mt-1.5 space-y-1 list-decimal list-inside">
+            <li>
+              <strong>シフト調整ページ</strong>：18日間サマリーの日付をタップし、「この日に出勤依頼を追加」または「別の場所・時間帯で出勤依頼を追加」で依頼内容（場所・時間帯・必要人数）を作成
+            </li>
+            <li>
+              <strong>LINE操作ページ</strong>の「出勤依頼送信」セクション：作成した依頼を選択し、送信先メンバーを選んで送信。LINEグループへの一斉通知も同時に送れます
+            </li>
+          </ol>
+          <span className="block mt-1 text-xs text-amber-600">
+            ⚠ 確定済みメンバーにも送付されます。送信前に対象メンバーをご確認ください。
+          </span>
+          <span className="block mt-0.5 text-xs text-gray-400">
+            ※メンバーが「出勤する」を選ぶと確定シフトとして自動登録されます。
+          </span>
         </SectionCard>
 
         <SectionCard icon={Users} title="名簿">
@@ -117,10 +142,11 @@ export function ManualAdminPage() {
 
         <SectionCard icon={Send} title="LINE操作">
           {/* 開発メモ: Herokuバックエンドへfetch送信。CHANNEL_ACCESS_TOKENはサーバー側で管理（フロントに置かない） */}
-          4種類のLINE送信ができます：
+          5種類のLINE送信ができます：
           <ul className="mt-1.5 space-y-1 list-disc list-inside">
-            <li><strong>グループ送信①</strong>：シフト連絡をグループへ一括送信</li>
-            <li><strong>グループ送信②</strong>：当日のポジション配置連絡</li>
+            <li><strong>グループ送信①</strong>：自由文のお知らせをグループへ送信</li>
+            <li><strong>グループ送信②</strong>：シフト連絡を送信。週（前週・今週・来週）を選ぶと確定シフトが日付・場所・時間帯・名前の形式で自動整形されます。名簿外の人も手動で追加可能</li>
+            <li><strong>グループ送信③</strong>：当日のポジション配置連絡。場所を選択し、担当者を配置行ごとに設定して送信。確定シフトのメンバーを選択肢から選べます</li>
             <li><strong>自分への連絡</strong>：管理者自身へのリマインダー送信</li>
             <li><strong>個別チャット</strong>：メンバーを選んで個別送信</li>
           </ul>
@@ -130,6 +156,9 @@ export function ManualAdminPage() {
         <SectionCard icon={Megaphone} title="全体掲示板">
           {/* 開発メモ: boardPublicコレクション。userは読取のみ、adminは書込/削除可 */}
           全ユーザー向けのお知らせを<strong>投稿・削除</strong>できます。投稿はユーザーの掲示板ページにリアルタイムで反映されます。「本日は給料日です」「シフト変更のお知らせ」などに活用してください。
+          <span className="block mt-1 text-xs text-gray-400">
+            ※削除した投稿は「削除済み」タブから<strong>復元</strong>または<strong>完全削除</strong>できます。
+          </span>
         </SectionCard>
 
         <SectionCard icon={Lock} title="非公開メモ">

@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import { UserLayout } from '../components/UserLayout';
 import { Card, Badge } from '../components/ui';
-import { CalendarDays, MessageSquare, User, FilePlus, Layers, Ban, Wallet, AlertTriangle, Palette } from 'lucide-react';
+import { CalendarDays, MessageSquare, User, FilePlus, Layers, Ban, Wallet, AlertTriangle, Palette, Bell } from 'lucide-react';
 import { useColorTheme, THEMES, THEME_LABELS } from '../hooks/useColorTheme';
 
 type IconType = typeof CalendarDays;
@@ -48,10 +48,25 @@ export function ManualUserPage() {
       <div className="space-y-3">
 
         <SectionCard icon={CalendarDays} title="カレンダー">
-          {/* 開発メモ: 黄色=plan / 緑=confirmed / 取消線グレー=reviewed / グレー=unavailable / 赤丸=today */}
-          全メンバーのシフトが<strong>月表示</strong>で重なって表示されます。
-          <strong>黄色</strong>＝予定・<strong>緑</strong>＝確定・<strong>赤い丸</strong>＝当日です。
-          日付をタップするとその日のシフト詳細が表示されます。
+          {/* 開発メモ: 全体表示=場所色分け5色 / 個人表示=黄色=plan・緑=confirmed / 取消線グレー=reviewed / グレー=unavailable / 赤丸=today */}
+          全メンバーのシフトが<strong>今週・来週の2週間表示</strong>で確認できます。左右の矢印で週を移動し、「今週」ボタンで今日の週に戻れます。
+          <ul className="mt-1.5 space-y-0.5 list-disc list-inside text-xs text-gray-500">
+            <li>全体表示時：セルの色は<strong>場所ごとの色分け</strong>で表示されます。凡例はカレンダー下に表示</li>
+            <li>自分のみ表示時：<strong>黄色</strong>＝予定・<strong>緑</strong>＝確定でステータスが分かります</li>
+            <li><strong>赤い丸</strong>＝当日。日付をタップするとその日のシフト詳細が確認できます</li>
+          </ul>
+        </SectionCard>
+
+        <SectionCard icon={Bell} title="お知らせ（出勤依頼）">
+          管理者から<strong>出勤依頼</strong>が届くと、カレンダーの上部に「お知らせ」として表示されます。
+          <ol className="mt-1.5 space-y-1 list-decimal list-inside">
+            <li>お知らせをタップして内容（日付・時間帯・場所）を確認</li>
+            <li>「<strong>出勤する</strong>」「<strong>不可</strong>」「<strong>調整して出勤</strong>」の3択で回答</li>
+            <li>コメントを添えて返答することもできます</li>
+          </ol>
+          <span className="block mt-1 text-xs text-gray-400">
+            ※「出勤する」を選ぶと確定シフトとして自動登録されます。複数人への依頼の場合、先に回答した人から埋まっていきます。
+          </span>
         </SectionCard>
 
         <SectionCard icon={MessageSquare} title="掲示板">
@@ -71,7 +86,7 @@ export function ManualUserPage() {
         <SectionCard icon={FilePlus} title="シフト申請">
           3つのモードから選びます：
           <ul className="mt-1.5 space-y-1 list-disc list-inside">
-            <li><strong>シフト申請</strong>：テンプレ（A〜D帯）または時間指定で申請。<strong>「申請を追加する」</strong>ボタンで複数日をまとめて申請可能</li>
+            <li><strong>シフト申請</strong>：テンプレ（A〜D帯）または時間指定で申請。テンプレ選択時に「<strong>時間を調整する</strong>」をタップすると開始・終了時刻を個別に変更できます。「<strong>申請を追加する</strong>」ボタンで複数日をまとめて申請可能</li>
             <li><strong>不可（シフトなし）</strong>：日付を追加して複数日まとめて不可申請</li>
             <li><strong>その他</strong>：給料受取のみの日に申請</li>
           </ul>
@@ -92,7 +107,7 @@ export function ManualUserPage() {
         </SectionCard>
 
         <SectionCard icon={Layers} title="テンプレ（A帯〜D帯）">
-          {/* 開発メモ: TEMPLATE_TIMES = { A:'20:00-LAST', B:'20:30-26:00', C:'21:30-LAST', D:'22:00-26:00' }（config.tsで一元管理） */}
+          {/* 開発メモ: TEMPLATE_TIMES = { A:'20:00-LAST', B:'20:30-02:00', C:'21:30-LAST', D:'22:00-02:00' }（config.tsで一元管理） */}
           <ul className="space-y-0.5">
             <li><strong>A帯</strong>：20:00〜LAST（閉店）</li>
             <li><strong>B帯</strong>：20:30〜翌2:00</li>
