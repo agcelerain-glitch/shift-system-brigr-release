@@ -84,6 +84,22 @@ export const displayTime = (value: string): string => {
   return value;
 };
 
+// シフトのキャンセル可否: locked=true または対象週月曜の2日前（土曜）以降はfalse
+// 例: 7/10(月)〜の週 → 7/8(土)00:00以降はキャンセル不可
+export const isShiftCancelAllowed = (shiftDate: string, locked?: boolean): boolean => {
+  if (locked) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const shift = new Date(shiftDate + 'T00:00:00');
+  const daysFromMonday = (shift.getDay() + 6) % 7; // Mon=0, Sun=6
+  const weekMonday = new Date(shift);
+  weekMonday.setDate(shift.getDate() - daysFromMonday);
+  weekMonday.setHours(0, 0, 0, 0);
+  const cancelCutoff = new Date(weekMonday);
+  cancelCutoff.setDate(weekMonday.getDate() - 2); // 月曜の2日前 = 土曜
+  return today < cancelCutoff;
+};
+
 export const copyToClipboard = async (text: string): Promise<boolean> => {
   try {
     await navigator.clipboard.writeText(text);

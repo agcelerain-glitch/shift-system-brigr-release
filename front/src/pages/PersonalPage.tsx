@@ -7,7 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { Card, EmptyState, Badge, Button, Tabs, Modal } from '../components/ui';
 import { Copy, CalendarDays, CheckCircle2, Clock, Trash2, AlertTriangle } from 'lucide-react';
-import { formatDateJP, copyToClipboard, todayStr, weekdayJP, displayTime } from '../lib/utils';
+import { formatDateJP, copyToClipboard, todayStr, weekdayJP, displayTime, isShiftCancelAllowed } from '../lib/utils';
 import { TEMPLATE_LABELS, TEMPLATE_TIMES } from '../lib/types';
 import type { Shift } from '../lib/types';
 import { cancelShift, requestDeleteShift } from '../lib/db';
@@ -79,7 +79,7 @@ function ShiftCard({
           <Button size="sm" variant="secondary" onClick={() => onCopy(`${formatDateJP(shift.date)} ${shift.subject} ${copyTimeLabel}${shift.place ? ` 場所:${shift.place}` : ''}`, '1日分コピーしました')}>
             <Copy className="w-3.5 h-3.5" />1日分
           </Button>
-          {shift.status === 'plan' && onCancel && (
+          {shift.status === 'plan' && onCancel && isShiftCancelAllowed(shift.date, shift.locked) && (
             <Button size="sm" variant="secondary" className="ml-auto text-red-500 hover:bg-red-50" onClick={() => onCancel(shift)} aria-label={`${formatDateJP(shift.date)}の申請を取り消す`}>
               <Trash2 className="w-3.5 h-3.5" />申請取消
             </Button>

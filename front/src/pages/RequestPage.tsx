@@ -7,7 +7,7 @@ import { useData } from '../contexts/DataContext';
 import { useToast } from '../contexts/ToastContext';
 import { Card, Button, Input, Select, Badge, EmptyState } from '../components/ui';
 import { FilePlus, Ban, Clock, Wallet, CheckCircle2, AlertTriangle, Trash2, Plus } from 'lucide-react';
-import { formatDateJP, weekdayJP, displayTime } from '../lib/utils';
+import { formatDateJP, weekdayJP, displayTime, isShiftCancelAllowed } from '../lib/utils';
 import { createShift, findShiftByMemberDate, cancelShift } from '../lib/db';
 import { SUBJECT_OPTIONS, TEMPLATE_LABELS, TEMPLATE_TIMES } from '../lib/config';
 import type { TemplateCode } from '../lib/config';
@@ -491,7 +491,7 @@ export function RequestPage() {
                   <span className="text-xs text-gray-400 hidden sm:inline">
                     {new Date(s.createdAt).toLocaleDateString()}
                   </span>
-                  {s.status === 'plan' && (
+                  {s.status === 'plan' && isShiftCancelAllowed(s.date, s.locked) && (
                     <button
                       onClick={() => handleCancel(s.id, s.version, s.subject)}
                       disabled={canceling === s.id}

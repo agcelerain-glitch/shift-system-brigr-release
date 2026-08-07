@@ -39,6 +39,7 @@ export interface Shift {
   createdAt: number; // 申請日
   updatedAt: number; // 最終修正日
   version: number; // 楽観ロック
+  locked?: boolean; // 土曜cron後にtrueになり、ユーザーからの申請取消を禁止
 }
 
 // shiftRequests: 管理者による出勤依頼
