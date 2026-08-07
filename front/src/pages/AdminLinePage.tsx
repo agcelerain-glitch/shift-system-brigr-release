@@ -303,6 +303,27 @@ export function AdminLinePage() {
         <h1 className="text-lg font-bold text-gray-900">LINE操作</h1>
       </div>
 
+      {/* ページ内ショートカット */}
+      <div className="flex gap-2 overflow-x-auto pb-1 mb-4">
+        {([
+          { id: 'section-group1', label: '①お知らせ',   cls: 'text-green-700  bg-green-50  border-green-200  hover:bg-green-100'  },
+          { id: 'section-group2', label: '②シフト連絡', cls: 'text-teal-700   bg-teal-50   border-teal-200   hover:bg-teal-100'   },
+          { id: 'section-group3', label: '③ポジション', cls: 'text-blue-700   bg-blue-50   border-blue-200   hover:bg-blue-100'   },
+          { id: 'section-self',   label: '自分への連絡', cls: 'text-purple-700 bg-purple-50 border-purple-200 hover:bg-purple-100' },
+          { id: 'section-dm',     label: '個別チャット', cls: 'text-amber-700  bg-amber-50  border-amber-200  hover:bg-amber-100'  },
+          { id: 'section-request',label: '出勤依頼送信', cls: 'text-violet-700 bg-violet-50 border-violet-200 hover:bg-violet-100' },
+        ] as const).map(({ id, label, cls }) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            className={`shrink-0 text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${cls}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {!API_BASE_URL && !isFirebaseConfigured && (
         <Card className="p-3 mb-4 bg-amber-50 border-amber-200">
           <p className="text-xs text-amber-700 flex items-center gap-1.5">
@@ -375,7 +396,7 @@ export function AdminLinePage() {
         <div className="flex flex-col gap-4">
 
           {/* グループ送信① お知らせなど */}
-          <Card className="p-5">
+          <Card id="section-group1" className="p-5">
             <div className="flex items-center gap-2 mb-3">
               <div className="w-9 h-9 rounded-xl bg-green-100 flex items-center justify-center text-green-600">
                 <Megaphone className="w-5 h-5" />
@@ -405,7 +426,7 @@ export function AdminLinePage() {
           </Card>
 
           {/* グループ送信② シフト連絡 */}
-          <Card className="p-5">
+          <Card id="section-group2" className="p-5">
             <div className="flex items-center gap-2 mb-3">
               <div className="w-9 h-9 rounded-xl bg-teal-100 flex items-center justify-center text-teal-600">
                 <CalendarDays className="w-5 h-5" />
@@ -556,7 +577,7 @@ export function AdminLinePage() {
         </div>{/* /左列 */}
 
         {/* 右列: グループ送信③ 当日ポジション配置 */}
-        <Card className="p-5">
+        <Card id="section-group3" className="p-5">
           <div className="flex items-center gap-2 mb-3">
             <div className="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600">
               <Users className="w-5 h-5" />
@@ -748,7 +769,7 @@ export function AdminLinePage() {
       </div>{/* /グリッド */}
 
       {/* セルフ通知 */}
-      <Card className="p-5 mt-4">
+      <Card id="section-self" className="p-5 mt-4">
         <div className="flex items-center gap-2 mb-3">
           <div className="w-9 h-9 rounded-xl bg-purple-100 flex items-center justify-center text-purple-600">
             <Bell className="w-5 h-5" />
@@ -777,7 +798,7 @@ export function AdminLinePage() {
       </Card>
 
       {/* 個別チャット */}
-      <Card className="p-5 mt-4">
+      <Card id="section-dm" className="p-5 mt-4">
         <div className="flex items-center gap-2 mb-3">
           <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600">
             <MessageCircle className="w-5 h-5" />
@@ -813,7 +834,7 @@ export function AdminLinePage() {
 
       {/* 出勤依頼送信セクション */}
       {shiftRequests.length > 0 && (
-        <Card className="p-5 mt-4">
+        <Card id="section-request" className="p-5 mt-4">
           <button
             className="w-full flex items-center justify-between mb-3"
             onClick={() => setInviteSectionOpen(o => !o)}

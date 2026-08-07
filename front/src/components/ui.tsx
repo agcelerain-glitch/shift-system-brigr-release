@@ -135,8 +135,8 @@ export function Select({ className = '', children, ...props }: SelectHTMLAttribu
   );
 }
 
-export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <div className={`bg-white rounded-2xl shadow-card border border-gray-100 ${className}`}>{children}</div>;
+export function Card({ children, className = '', id }: { children: ReactNode; className?: string; id?: string }) {
+  return <div id={id} className={`bg-white rounded-2xl shadow-card border border-gray-100 ${className}`}>{children}</div>;
 }
 
 export function Modal({ open, onClose, title, children, footer }: { open: boolean; onClose: () => void; title: string; children: ReactNode; footer?: ReactNode }) {
