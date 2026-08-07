@@ -83,7 +83,7 @@ export function AdminShiftPage() {
   const adminName = name ?? '管理者';
   const toast = useToast();
   const [sortKey, setSortKey] = useState<SortKey>('date');
-  const [activeFilters, setActiveFilters] = useState<Set<FilterStatus>>(new Set(['plan', 'delete_request', 'unavailable']));
+  const [activeFilters, setActiveFilters] = useState<Set<FilterStatus>>(new Set(['plan', 'delete_request']));
 
   const toggleFilter = (f: FilterStatus) => {
     setActiveFilters((prev) => {
@@ -231,6 +231,8 @@ export function AdminShiftPage() {
   const filtered = useMemo(() => {
     let list = shifts.filter((s) => {
       const isUnavail = s.timeType === 'none';
+      // 未確認の不可申請（plan）は予定フィルターに含める。確認済（reviewed等）は不可フィルター
+      if (isUnavail && s.status === 'plan') return activeFilters.has('plan');
       if (isUnavail) return activeFilters.has('unavailable');
       if (s.status === 'delete_requested') return activeFilters.has('delete_request');
       if (s.status === 'plan') return activeFilters.has('plan');
