@@ -93,27 +93,6 @@ function getNextWeekRange() {
   return { start, end, label: `${formatDateShort(start)}〜${formatDateShort(end)}` };
 }
 
-// ─── 管理者通知先リスト ─────────────────────────────────
-
-async function getAdminNotifyList() {
-  const selfId = process.env.LINE_SELF_USER_ID ?? null;
-  try {
-    const snap = await db.collection('members').where('role', '==', 'admin').get();
-    const admins = snap.docs
-      .map((d) => ({ name: d.data().name, lineUserId: d.data().lineUserId }))
-      .filter((a) => a.lineUserId);
-    if (admins.length > 0) {
-      console.log(`[lock] 管理者通知先: ${admins.length}件 — ${admins.map((a) => a.name).join('・')}`);
-      return admins;
-    }
-    console.warn('[lock] members に role=admin のメンバーなし。LINE_SELF_USER_ID にフォールバック');
-    return selfId ? [{ name: '開発者(fallback)', lineUserId: selfId }] : [];
-  } catch (e) {
-    console.warn('[lock] members 読み取り失敗、フォールバック:', e?.message);
-    return selfId ? [{ name: '開発者(fallback)', lineUserId: selfId }] : [];
-  }
-}
-
 // ─── LINE ヘルパー ────────────────────────────────────────
 
 function getLineClient() {
@@ -122,35 +101,18 @@ function getLineClient() {
   return new messagingApi.MessagingApiClient({ channelAccessToken: token });
 }
 
-async function pushLine(client, to, text) {
-  if (!client || !to) return false;
-  try {
-    await client.pushMessage({ to, messages: [{ type: 'text', text }] });
-    return true;
-  } catch (e) {
-    console.error(`[lock] LINE送信失敗 (${to}):`, e?.message ?? e);
-    return false;
-  }
-}
-
-async function notifyAdmins(client, adminList, text) {
-  if (DRY_RUN || adminList.length === 0) return [];
-  const results = await Promise.allSettled(adminList.map((a) => pushLine(client, a.lineUserId, text)));
-  return results.map((r, i) => ({
-    name: adminList[i].name,
-    lineUserId: adminList[i].lineUserId,
-    ok: r.status === 'fulfilled' && r.value,
-  }));
-}
-
 async function notifyDeveloper(client, text) {
   const selfId = process.env.LINE_SELF_USER_ID;
-  if (!selfId) return;
+  if (!selfId || !client) return;
   if (DRY_RUN) {
     console.log(`[lock][DRY-RUN] 開発者通知(スキップ):\n${text}`);
     return;
   }
-  await pushLine(client, selfId, text);
+  try {
+    await client.pushMessage({ to: selfId, messages: [{ type: 'text', text }] });
+  } catch (e) {
+    console.error('[lock] LINE開発者通知失敗:', e?.message ?? e);
+  }
 }
 
 // ─── メイン ──────────────────────────────────────────────
@@ -170,7 +132,6 @@ async function main() {
   console.log(`[lock] ${mode}開始 — 来週 ${label} のシフトをロック`);
 
   const lineClient = getLineClient();
-  const adminList = await getAdminNotifyList();
 
   // 1. 来週のシフト全件取得（ステータス問わず）
   const shiftsSnap = await db.collection('shifts')
@@ -182,10 +143,8 @@ async function main() {
   console.log(`[lock] 対象シフト: ${total}件`);
 
   if (total === 0) {
-    const msg = `[シフトロック完了]\n来週 ${label}\n\n対象シフトなし（提出0件）`;
     console.log('[lock] 対象シフトなし — 終了');
-    await notifyAdmins(lineClient, adminList, msg);
-    await notifyDeveloper(lineClient, `[開発者通知] ロックジョブ完了\n${label}\n\n対象シフト0件`);
+    await notifyDeveloper(lineClient, `[ロック] ${label} 対象0件`);
     return;
   }
 
@@ -213,42 +172,13 @@ async function main() {
     }
   }
 
-  console.log(`[lock] 完了: ${lockedCount}件ロック / ${skippedCount}件スキップ（既ロック済み）`);
+  console.log(`[lock] ${mode}完了 — ${lockedCount}件ロック / ${skippedCount}件スキップ`);
 
-  // 3. 管理者に結果を通知
-  const summaryLines = [
-    `[シフトロック${DRY_RUN ? '(DRY-RUN)' : '完了'}]`,
-    `来週 ${label}`,
-    '',
-    `対象: ${total}件`,
-    `ロック: ${lockedCount}件`,
-    ...(skippedCount > 0 ? [`スキップ（既ロック済み）: ${skippedCount}件`] : []),
-    '',
-    '来週分のシフト申請取り消しが\nユーザー側で不可になりました。',
-  ];
-  const summary = summaryLines.join('\n');
-  console.log(`[lock] 管理者通知:\n${summary}`);
-
-  const notifyResults = await notifyAdmins(lineClient, adminList, summary);
-  const notifyOk = notifyResults.filter((r) => r.ok).length;
-
-  // 4. 開発者にモニタリング通知
-  const devParts = [
-    `[開発者通知] ロックジョブ完了`,
-    `${label}`,
-    '',
-    `▼ シフトロック結果`,
-    `・対象: ${total}件`,
-    `・ロック完了: ${DRY_RUN ? '(dry)' : `${lockedCount}件`}`,
-    ...(skippedCount > 0 ? [`・既ロック済みスキップ: ${skippedCount}件`] : []),
-    '',
-    `▼ 管理者通知`,
-    `${notifyOk}/${adminList.length}件成功`,
-    ...notifyResults.map((r) => `${r.ok ? '✅' : '❌'} ${r.name}`),
-  ];
-  await notifyDeveloper(lineClient, devParts.join('\n'));
-
-  console.log(`[lock] ${mode}完了 — ${lockedCount}件ロック / 管理者通知${notifyOk}/${adminList.length}件`);
+  // 3. 開発者に簡易通知
+  const devMsg = DRY_RUN
+    ? `[ロック(dry)] ${label} ${total}件対象`
+    : `[ロック完了] ${label} ${lockedCount}件`;
+  await notifyDeveloper(lineClient, devMsg);
 }
 
 main().catch(async (e) => {
