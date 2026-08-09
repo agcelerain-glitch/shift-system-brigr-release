@@ -12,7 +12,7 @@ import {
   AlertTriangle, BellPlus, X,
 } from 'lucide-react';
 import { formatDateJP, formatDateTimeJP, isPast7Days, weekdayJP, todayStr, addDays, displayTime } from '../lib/utils';
-import { PLACE_OPTIONS, TEMPLATE_LABELS, TEMPLATE_TIMES } from '../lib/config';
+import { PLACE_OPTIONS, TEMPLATE_LABELS, TEMPLATE_TIMES, PLACE_CAPACITY, PLACE_SHORT } from '../lib/config';
 import type { Shift, ApprovalLog } from '../lib/types';
 import type { TemplateCode } from '../lib/config';
 import { approveShift, restoreShift, updateMemberLineId, deleteMember, adminDeleteShift, createShiftRequest } from '../lib/db';
@@ -267,7 +267,18 @@ export function AdminShiftPage() {
     return Array.from({ length: 18 }, (_, i) => {
       const date = addDays(today, i);
       const d = new Date(date + 'T00:00:00');
+      const isWkend = d.getDay() === 0 || d.getDay() === 6;
       const dayShifts = shifts.filter((s) => s.date === date);
+      // 場所別確定人数を集計し定員超過チェック
+      const placeCounts: Record<string, number> = {};
+      for (const s of dayShifts) {
+        if (s.status === 'confirmed' && s.timeType !== 'none' && s.place) {
+          placeCounts[s.place] = (placeCounts[s.place] ?? 0) + 1;
+        }
+      }
+      const overCapacityPlaces = Object.entries(PLACE_CAPACITY)
+        .filter(([place, cap]) => (placeCounts[place] ?? 0) > (isWkend ? cap.weekend : cap.weekday))
+        .map(([place]) => place);
       return {
         date,
         wd: ['日', '月', '火', '水', '木', '金', '土'][d.getDay()],
@@ -279,6 +290,7 @@ export function AdminShiftPage() {
         plan: dayShifts.filter((s) => s.status === 'plan' && s.timeType !== 'none').length,
         reviewed: dayShifts.filter((s) => s.status === 'reviewed').length,
         unavailable: dayShifts.filter((s) => s.timeType === 'none').length,
+        overCapacityPlaces,
       };
     });
   }, [shifts, today]);
@@ -479,21 +491,37 @@ export function AdminShiftPage() {
       <Card className="p-3 mb-4 overflow-x-auto">
         <p className="text-xs font-medium text-gray-500 mb-2">今後18日間の人数（横スクロール）</p>
         <div className="flex gap-2 min-w-max">
-          {weekSummary.map(({ date, wd, day, isToday, isSun, isSat, confirmed, plan, reviewed, unavailable }) => (
+          {weekSummary.map(({ date, wd, day, isToday, isSun, isSat, confirmed, plan, reviewed, unavailable, overCapacityPlaces }) => (
             <button
               key={date}
               onClick={() => setSummarySelectedDate(date)}
-              className={`flex flex-col items-center px-3 py-2 rounded-xl min-w-[52px] transition hover:ring-2 hover:ring-brand-300 active:scale-95 ${isToday ? 'bg-brand-50 ring-1 ring-brand-300' : 'bg-gray-50 hover:bg-brand-50'}`}
+              className={`relative flex flex-col items-center px-3 py-2 rounded-xl min-w-[52px] transition hover:ring-2 hover:ring-brand-300 active:scale-95 ${isToday ? 'bg-brand-50 ring-1 ring-brand-300' : 'bg-gray-50 hover:bg-brand-50'}`}
             >
+              {overCapacityPlaces.length > 0 && (
+                <span className="absolute -top-1 -right-1 flex items-center justify-center w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full leading-none">!</span>
+              )}
               <span className={`text-[10px] font-medium ${isSun ? 'text-red-500' : isSat ? 'text-blue-500' : 'text-gray-500'}`}>{wd}</span>
               <span className={`text-sm font-bold ${isToday ? 'text-brand-700' : 'text-gray-800'}`}>{day}</span>
               <div className="mt-1 space-y-0.5 text-[10px] text-center w-full">
-                {confirmed > 0 && <div className="bg-confirmed-soft text-confirmed-strong rounded px-1">確{confirmed}</div>}
+                {confirmed > 0 && (
+                  <div className={`rounded px-1 ${overCapacityPlaces.length > 0 ? 'bg-red-100 text-red-700 font-bold' : 'bg-confirmed-soft text-confirmed-strong'}`}>
+                    確{confirmed}
+                  </div>
+                )}
                 {plan > 0 && <div className="bg-plan-soft text-plan-strong rounded px-1">予{plan}</div>}
                 {reviewed > 0 && <div className="bg-gray-100 text-gray-400 rounded px-1">済{reviewed}</div>}
                 {unavailable > 0 && <div className="bg-slate-100 text-slate-500 rounded px-1">不{unavailable}</div>}
                 {confirmed === 0 && plan === 0 && reviewed === 0 && unavailable === 0 && <div className="text-gray-300">—</div>}
               </div>
+              {overCapacityPlaces.length > 0 && (
+                <div className="flex flex-wrap gap-0.5 justify-center mt-1">
+                  {overCapacityPlaces.map((p) => (
+                    <span key={p} className="text-[8px] font-bold text-red-600 bg-red-50 px-0.5 rounded leading-tight">
+                      {PLACE_SHORT[p]}超
+                    </span>
+                  ))}
+                </div>
+              )}
             </button>
           ))}
         </div>

@@ -15,7 +15,7 @@ import { callLineApi, subscribeLineConfig, deleteGroupId, sendShiftRequestInvite
 import { isFirebaseConfigured, API_BASE_URL } from '../lib/firebase';
 import { formatDateJP, todayStr, displayTime } from '../lib/utils';
 import { MonthCalendar, DayShiftList } from '../components/MonthCalendar';
-import { PLACE_OPTIONS, TEMPLATE_LABELS } from '../lib/config';
+import { PLACE_OPTIONS, TEMPLATE_LABELS, PLACE_CAPACITY, PLACE_SHORT } from '../lib/config';
 import type { Shift } from '../lib/types';
 
 // 配置テンプレート（固定順序）
@@ -156,6 +156,7 @@ export function AdminLinePage() {
   type PivotDay = {
     date: string;
     placeGroups: { place: string; timeGroups: { label: string; members: string[] }[] }[];
+    overCapacityPlaces: string[];
   };
 
   const shiftSharePivot = useMemo((): PivotDay[] => {
@@ -182,12 +183,25 @@ export function AdminLinePage() {
         tm.get('追加')!.push(e.name);
       }
 
+      // 場所別の合計人数を集計し定員超過チェック
+      const d = new Date(date + 'T00:00:00');
+      const isWkend = d.getDay() === 0 || d.getDay() === 6;
+      const overCapacityPlaces = Object.entries(PLACE_CAPACITY)
+        .filter(([place, cap]) => {
+          const tm = placeMap.get(place);
+          if (!tm) return false;
+          const total = Array.from(tm.values()).reduce((sum, mbs) => sum + mbs.length, 0);
+          return total > (isWkend ? cap.weekend : cap.weekday);
+        })
+        .map(([place]) => place);
+
       return {
         date,
         placeGroups: Array.from(placeMap.entries()).map(([place, tm]) => ({
           place,
           timeGroups: Array.from(tm.entries()).map(([label, mbs]) => ({ label, members: mbs })),
         })),
+        overCapacityPlaces,
       };
     });
   }, [shifts, shiftShareWeekDates, shiftShareExtras]);
@@ -477,9 +491,18 @@ export function AdminLinePage() {
                 shiftSharePivot.map((day) => {
                   if (day.placeGroups.length === 0) return null;
                   return (
-                    <div key={day.date} className="border border-gray-200 rounded-xl overflow-hidden">
-                      <div className="bg-gray-50 px-3 py-1.5 text-xs font-semibold text-gray-700 border-b border-gray-200">
-                        {formatShortDate(day.date)}
+                    <div key={day.date} className={`border rounded-xl overflow-hidden ${day.overCapacityPlaces.length > 0 ? 'border-red-300' : 'border-gray-200'}`}>
+                      <div className={`px-3 py-1.5 text-xs font-semibold border-b flex items-center justify-between ${day.overCapacityPlaces.length > 0 ? 'bg-red-50 border-red-200 text-red-800' : 'bg-gray-50 border-gray-200 text-gray-700'}`}>
+                        <span>{formatShortDate(day.date)}</span>
+                        {day.overCapacityPlaces.length > 0 && (
+                          <span className="flex gap-1">
+                            {day.overCapacityPlaces.map((p) => (
+                              <span key={p} className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-tight">
+                                {PLACE_SHORT[p]}!
+                              </span>
+                            ))}
+                          </span>
+                        )}
                       </div>
                       <div className="divide-y divide-gray-100">
                         {day.placeGroups.map((pg) => (

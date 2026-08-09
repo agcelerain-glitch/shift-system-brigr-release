@@ -8,6 +8,20 @@ export type TemplateCode = 'A' | 'B' | 'C' | 'D';
 export const PLACE_OPTIONS = ['ブリジャール', 'ルチア', 'セラス', 'ルミ・ベガ'] as const;
 export type PlaceOption = typeof PLACE_OPTIONS[number];
 
+// ---- 場所ごとの定員（平日・休日。休日=土日） ----
+export const PLACE_CAPACITY: Record<string, { weekday: number; weekend: number }> = {
+  'ブリジャール': { weekday: 5, weekend: 7 },
+  'ルチア': { weekday: 3, weekend: 4 },
+  'セラス': { weekday: 1, weekend: 1 },
+};
+
+// ---- 超過バッジ用略称 ----
+export const PLACE_SHORT: Record<string, string> = {
+  'ブリジャール': 'ブ',
+  'ルチア': 'ル',
+  'セラス': 'チ',
+};
+
 // ---- テンプレートA〜Dの表示ラベル ----
 export const TEMPLATE_LABELS: Record<TemplateCode, string> = {
   A: 'A帯',
