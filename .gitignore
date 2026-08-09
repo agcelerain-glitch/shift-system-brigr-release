@@ -44,6 +44,10 @@ build/
 # 旧ファイル
 old/
 
+# ローカル運用専用（git管理外）
+CHANGELOG.md
+CLAUDE.md
+
 # Vite
 front/.env
 front/.env.local
