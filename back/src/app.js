@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const crypto = require('crypto');
 const { messagingApi, validateSignature } = require('@line/bot-sdk');
 const admin = require('firebase-admin');
 
@@ -714,6 +715,71 @@ async function handleGroupRegistration(newGroupId, senderUserId, db) {
 }
 
 // ──────────────────────────────────────────────────────────
+// 名前変更トークン発行（FirestoreにAdmin SDKで書き込む）
+// ──────────────────────────────────────────────────────────
+
+async function generateNameChangeToken(db, forMember) {
+  const token = crypto.randomBytes(32).toString('hex');
+  const now = Date.now();
+  const expiresAt = now + 60 * 60 * 1000;
+  await db.collection('nameChangeTokens').doc(token).set({
+    createdAt: now,
+    expiresAt,
+    used: false,
+    forMember: forMember ?? null,
+  });
+  const frontUrl = process.env.FRONTEND_URL || process.env.ALLOWED_ORIGIN || '';
+  const link = frontUrl ? `${frontUrl}/name-setup?token=${token}` : `（FRONTEND_URL未設定）token=${token}`;
+  const expStr = new Date(expiresAt).toLocaleString('ja-JP', {
+    timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+  });
+  return { token, link, expStr };
+}
+
+// ──────────────────────────────────────────────────────────
+// 開発者専用コマンドハンドラ（SELF_USER_IDからのDMのみ実行）
+// ──────────────────────────────────────────────────────────
+
+const DEV_HELP_TEXT = `🛠 開発者コマンド
+
+📝 名前変更リンク発行
+  名前変更
+  名前変更 山田花子
+（1時間有効・1回限り）
+
+📅 シフト確認（共通）
+  今日 / 今週 / 7/21 など`;
+
+async function handleDevCommand(text, replyToken, db) {
+  if (text === 'ヘルプ') {
+    await client.replyMessage({ replyToken, messages: [{ type: 'text', text: DEV_HELP_TEXT }] });
+    return true;
+  }
+
+  const ncMatch = text.match(/^名前変更(?:[\s　]+(.+))?$/);
+  if (ncMatch) {
+    const forMember = ncMatch[1]?.trim() || null;
+    if (!db) {
+      await client.replyMessage({ replyToken, messages: [{ type: 'text', text: '❌ Firebase未接続のためトークン発行できません。' }] });
+      return true;
+    }
+    const { link, expStr } = await generateNameChangeToken(db, forMember);
+    const msg = [
+      '🔗 名前変更リンクを発行しました',
+      `⏰ 有効期限: ${expStr} まで（60分間）`,
+      forMember ? `👤 対象: ${forMember} さん` : '👤 対象: 誰でも使用可',
+      '⚠️  1回限り有効',
+      '',
+      link,
+    ].join('\n');
+    await client.replyMessage({ replyToken, messages: [{ type: 'text', text: msg }] });
+    return true;
+  }
+
+  return false;
+}
+
+// ──────────────────────────────────────────────────────────
 // メインイベントハンドラ
 // ──────────────────────────────────────────────────────────
 
@@ -759,7 +825,13 @@ async function handleLineEvent(event) {
       return;
     }
 
-    // ② 名前登録（「名前登録 名前」形式）
+    // ② 開発者専用コマンド（SELF_USER_IDからのDMのみ）
+    if (sourceType === 'user' && lineUserId === SELF_USER_ID) {
+      const handled = await handleDevCommand(text, replyToken, db);
+      if (handled) return;
+    }
+
+    // ③ 名前登録（「名前登録 名前」形式）
     const newMatch = text.match(/^名前登録[\s　]+(.+)$/);
     const oldMatch = !newMatch && text.match(/^登録\s*[:：]\s*(.+)$/);
     const nameMatch = newMatch || oldMatch;
@@ -824,7 +896,28 @@ async function handleLineEvent(event) {
       return;
     }
 
-    // ③ 日付問い合わせ
+    // ④ 一般ユーザーの名前変更リクエスト検知（開発者に転送）
+    if (sourceType === 'user' && lineUserId !== SELF_USER_ID && text.includes('名前変更')) {
+      let senderName = null;
+      if (db && lineUserId) {
+        try {
+          const snap = await db.collection('members').where('lineUserId', '==', lineUserId).limit(1).get();
+          if (!snap.empty) senderName = snap.docs[0].data().name;
+        } catch {}
+      }
+      if (SELF_USER_ID) {
+        const nameHint = senderName ? `\n\n発行コマンド: 名前変更 ${senderName}` : '';
+        const notifyMsg = `【名前変更リクエスト】\n${senderName ? `${senderName} さん` : `未登録ユーザー（${lineUserId}）`}から名前変更のリクエストが届きました。${nameHint}`;
+        await client.pushMessage({ to: SELF_USER_ID, messages: [{ type: 'text', text: notifyMsg }] }).catch(() => {});
+      }
+      await client.replyMessage({
+        replyToken,
+        messages: [{ type: 'text', text: '名前変更のリクエストを管理者に送信しました。\n変更リンクが届くまでしばらくお待ちください。' }],
+      });
+      return;
+    }
+
+    // ⑤ 日付問い合わせ
     const dateQuery = parseDateMessage(text);
     if (dateQuery) {
       if (!db) {
@@ -851,7 +944,7 @@ async function handleLineEvent(event) {
       return;
     }
 
-    // ④ 未認識メッセージ（スキップ）
+    // ⑥ 未認識メッセージ（スキップ）
     console.log(`[webhook] 未認識メッセージ（スキップ）: userId=${lineUserId} text="${text}"`);
   }
 }
