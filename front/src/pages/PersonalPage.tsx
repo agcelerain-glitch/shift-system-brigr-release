@@ -220,10 +220,16 @@ export function PersonalPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="bg-rose-50 rounded-xl p-4 text-center">
-                <AlertTriangle className="w-8 h-8 text-rose-500 mx-auto mb-2" />
-                <p className="text-sm font-semibold text-rose-700">本当に削除依頼を出しますか？</p>
-                <p className="text-xs text-rose-500 mt-1">管理者が承認するとシフト情報が完全に削除されます</p>
+              <div className="bg-rose-50 rounded-xl p-4">
+                <div className="flex items-center justify-center mb-3">
+                  <AlertTriangle className="w-8 h-8 text-rose-500" />
+                </div>
+                <p className="text-sm font-bold text-rose-700 text-center mb-3">本当に削除依頼を出しますか？</p>
+                <p className="text-xs text-rose-600 leading-relaxed space-y-1">
+                  この操作は承認後に削除を促すものです。<br />
+                  <span className="font-bold underline">必ず</span>、個別のチャットにてシフトの<span className="underline">辞退理由を報告</span>してください。<br />
+                  急用の場合は、<span className="font-bold">管理者へ電話</span>の連絡をお願いします。
+                </p>
               </div>
               <div className="bg-gray-50 rounded-lg p-2.5">
                 <p className="text-xs text-gray-600">{formatDateJP(deleteReqTarget.date)} · {deleteReqTarget.subject}</p>
