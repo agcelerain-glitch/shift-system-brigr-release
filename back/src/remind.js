@@ -197,14 +197,19 @@ async function main() {
     console.warn('[remind] 管理者通知先が設定されていません');
   }
 
-  // 1. 全メンバー取得
+  // 1. 全メンバー取得（excludeFromReminder: true のメンバーは除外）
   const membersSnap = await db.collection('members').get();
   if (membersSnap.empty) {
     console.log('[remind] メンバーなし — 終了');
     return;
   }
-  const members = membersSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  console.log(`[remind] メンバー総数: ${members.length}名`);
+  const allMembers = membersSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const excluded = allMembers.filter((m) => m.excludeFromReminder === true);
+  const members = allMembers.filter((m) => m.excludeFromReminder !== true);
+  if (excluded.length > 0) {
+    console.log(`[remind] リマインド除外対象: ${excluded.map((m) => m.name).join('・')}`);
+  }
+  console.log(`[remind] メンバー総数: ${allMembers.length}名（除外: ${excluded.length}名 / 対象: ${members.length}名）`);
 
   // 2. 来週のシフトを取得（ステータス問わず全申請）
   const shiftsSnap = await db.collection('shifts')

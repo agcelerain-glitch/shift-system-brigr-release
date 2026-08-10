@@ -896,28 +896,7 @@ async function handleLineEvent(event) {
       return;
     }
 
-    // ④ 一般ユーザーの名前変更リクエスト検知（開発者に転送）
-    if (sourceType === 'user' && lineUserId !== SELF_USER_ID && text.includes('名前変更')) {
-      let senderName = null;
-      if (db && lineUserId) {
-        try {
-          const snap = await db.collection('members').where('lineUserId', '==', lineUserId).limit(1).get();
-          if (!snap.empty) senderName = snap.docs[0].data().name;
-        } catch {}
-      }
-      if (SELF_USER_ID) {
-        const nameHint = senderName ? `\n\n発行コマンド: 名前変更 ${senderName}` : '';
-        const notifyMsg = `【名前変更リクエスト】\n${senderName ? `${senderName} さん` : `未登録ユーザー（${lineUserId}）`}から名前変更のリクエストが届きました。${nameHint}`;
-        await client.pushMessage({ to: SELF_USER_ID, messages: [{ type: 'text', text: notifyMsg }] }).catch(() => {});
-      }
-      await client.replyMessage({
-        replyToken,
-        messages: [{ type: 'text', text: '名前変更のリクエストを管理者に送信しました。\n変更リンクが届くまでしばらくお待ちください。' }],
-      });
-      return;
-    }
-
-    // ⑤ 日付問い合わせ
+    // ④ 日付問い合わせ
     const dateQuery = parseDateMessage(text);
     if (dateQuery) {
       if (!db) {
