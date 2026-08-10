@@ -416,8 +416,19 @@ export function AdminShiftPage() {
   const doRestore = async (log: ApprovalLog) => {
     try {
       const res = await restoreShift(log.id);
-      if (res === 'ok') toast.show('復元しました', 'success');
-      else if (res === 'expired') toast.show('7日経過のため復元不可です', 'error');
+      if (res === 'ok') {
+        toast.show('復元しました', 'success');
+        // 復元成功後、該当の調整マークを自動解除
+        const before = log.beforeState;
+        if (before) {
+          const key = mkKey(before.date, before.memberName);
+          setMarkedKeys((prev) => {
+            const next = new Set(prev);
+            next.delete(key);
+            return next;
+          });
+        }
+      } else if (res === 'expired') toast.show('7日経過のため復元不可です', 'error');
       else if (res === 'conflict') toast.show('競合: 別のadminが同時操作中です。画面を更新してから再試行してください', 'error');
       else toast.show('復元に失敗しました', 'error');
     } catch (e) {
@@ -631,16 +642,25 @@ export function AdminShiftPage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {pivotData.map((group) => (
+              {pivotData.map((group) => {
+                const selectedD = summarySelectedDate ? new Date(summarySelectedDate + 'T00:00:00') : null;
+                const isWkend = selectedD ? (selectedD.getDay() === 0 || selectedD.getDay() === 6) : false;
+                const cap = PLACE_CAPACITY[group.place];
+                const isOver = cap ? group.total > (isWkend ? cap.weekend : cap.weekday) : false;
+                return (
                 <div key={group.place} className="border border-gray-100 rounded-xl overflow-hidden">
                   {/* 場所ヘッダー */}
-                  <div className="flex items-center justify-between px-3 py-2 bg-gray-50">
-                    <span className="flex items-center gap-1.5 text-sm font-semibold text-gray-700">
-                      <MapPin className="w-3.5 h-3.5 text-gray-400" />
+                  <div className={`flex items-center justify-between px-3 py-2 ${isOver ? 'bg-red-50' : 'bg-gray-50'}`}>
+                    <span className={`flex items-center gap-1.5 text-sm font-semibold ${isOver ? 'text-red-700' : 'text-gray-700'}`}>
+                      <MapPin className={`w-3.5 h-3.5 ${isOver ? 'text-red-400' : 'text-gray-400'}`} />
                       {group.place || '場所未設定'}
                     </span>
-                    <span className="text-xs text-gray-500 bg-white px-2 py-0.5 rounded-full border border-gray-200">
-                      計{group.total}人
+                    <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${
+                      isOver
+                        ? 'text-red-600 bg-red-100 border-red-300 font-bold'
+                        : 'text-gray-500 bg-white border-gray-200'
+                    }`}>
+                      計{group.total}人{isOver && cap && ` / 定員${isWkend ? cap.weekend : cap.weekday}人`}
                     </span>
                   </div>
                   {/* 帯 × 名前バッジ + 出勤依頼追加 */}
@@ -725,7 +745,8 @@ export function AdminShiftPage() {
                     })}
                   </div>
                 </div>
-              ))}
+                );
+              })}
               {/* 別の場所・時間帯で出勤依頼を追加（確定シフトがある場合も使用可） */}
               {(() => {
                 const freeKey = `${summarySelectedDate}_新規依頼_`;
