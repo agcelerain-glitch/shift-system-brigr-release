@@ -4,12 +4,14 @@
 import {
   collection,
   doc,
+  getDoc,
   onSnapshot,
   query,
   where,
   orderBy,
   addDoc,
   setDoc,
+  updateDoc,
   deleteDoc,
   runTransaction,
   writeBatch,
@@ -590,3 +592,24 @@ export async function respondToShiftRequestInvite(params: {
 }
 
 export { now };
+
+// ---- nameChangeTokens ----
+
+export type NameChangeTokenResult =
+  | { valid: true; forMember: string | null }
+  | { valid: false; forMember: null; error: 'not_found' | 'expired' | 'used' };
+
+export async function verifyNameChangeToken(token: string): Promise<NameChangeTokenResult> {
+  if (!isFirebaseConfigured || !db) return { valid: false, forMember: null, error: 'not_found' };
+  const snap = await getDoc(doc(db, 'nameChangeTokens', token));
+  if (!snap.exists()) return { valid: false, forMember: null, error: 'not_found' };
+  const data = snap.data();
+  if (data.used) return { valid: false, forMember: null, error: 'used' };
+  if (data.expiresAt < Date.now()) return { valid: false, forMember: null, error: 'expired' };
+  return { valid: true, forMember: (data.forMember as string | null) ?? null };
+}
+
+export async function markNameChangeTokenUsed(token: string): Promise<void> {
+  if (!isFirebaseConfigured || !db) return;
+  await updateDoc(doc(db, 'nameChangeTokens', token), { used: true });
+}

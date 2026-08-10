@@ -8,7 +8,7 @@ import { User, ArrowRight } from 'lucide-react';
 import { useAuth, LS_SAVED_NAME_KEY } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { Button, Input } from '../components/ui';
-import { upsertMember } from '../lib/db';
+import { upsertMember, verifyNameChangeToken, markNameChangeTokenUsed } from '../lib/db';
 
 export function NameSetupPage() {
   const { setName, name, role } = useAuth();
@@ -25,9 +25,35 @@ export function NameSetupPage() {
   const [value, setValue] = useState(name ?? '');
   const [saving, setSaving] = useState(false);
 
-  // savedNameがある場合はボタン操作なしで自動遷移（devModeは除外）
+  // トークンモード: ?token=<token> で1時間限定の名前変更リンク
+  const tokenParam = searchParams.get('token');
+  const [tokenChecking, setTokenChecking] = useState(!!tokenParam);
+  const [tokenMode, setTokenMode] = useState(false);
+  const [tokenForMember, setTokenForMember] = useState<string | null>(null);
+  const [tokenError, setTokenError] = useState<string | null>(null);
+
   useEffect(() => {
-    if (!savedName || devMode) return;
+    if (!tokenParam) return;
+    (async () => {
+      setTokenChecking(true);
+      const result = await verifyNameChangeToken(tokenParam);
+      if (result.valid) {
+        setTokenMode(true);
+        setTokenForMember(result.forMember);
+      } else {
+        const msg =
+          result.error === 'expired' ? 'リンクの有効期限が切れています（発行から1時間）'
+          : result.error === 'used' ? 'このリンクは既に使用済みです'
+          : '無効なリンクです。管理者に再発行を依頼してください';
+        setTokenError(msg);
+      }
+      setTokenChecking(false);
+    })();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // savedNameがある場合はボタン操作なしで自動遷移（devMode・tokenParam は除外）
+  useEffect(() => {
+    if (!savedName || devMode || tokenParam) return;
     let cancelled = false;
     (async () => {
       try {
@@ -62,6 +88,10 @@ export function NameSetupPage() {
     setSaving(true);
     try {
       await upsertMember(trimmed, role ?? undefined);
+      // トークンモードの場合は使用済みにしてから遷移
+      if (tokenParam && tokenMode) {
+        try { await markNameChangeTokenUsed(tokenParam); } catch { /* 消費失敗は続行 */ }
+      }
     } catch (err) {
       toast.show(`名前の保存に失敗しました: ${(err as Error).message}`, 'error');
       setSaving(false);
@@ -89,13 +119,81 @@ export function NameSetupPage() {
     </button>
   );
 
-  // savedNameあり・非devMode → 自動遷移中のローディング表示
-  if (savedName && !devMode) {
+  // トークン検証中
+  if (tokenChecking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-brand-50 via-white to-brand-50">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-brand-400 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-sm text-gray-500">リンクを確認中…</p>
+        </div>
+      </div>
+    );
+  }
+
+  // トークンエラー（期限切れ・使用済み・無効）
+  if (tokenError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-brand-50 via-white to-brand-50 p-4">
+        <div className="w-full max-w-sm text-center">
+          <div className="w-14 h-14 rounded-2xl bg-red-100 flex items-center justify-center text-red-500 mx-auto mb-4">
+            <User className="w-7 h-7" />
+          </div>
+          <h1 className="text-lg font-bold text-gray-900 mb-2">リンクが無効です</h1>
+          <p className="text-sm text-gray-500">{tokenError}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // savedNameあり・非devMode・非tokenMode → 自動遷移中のローディング表示
+  if (savedName && !devMode && !tokenMode) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-brand-50 via-white to-brand-50">
         <div className="text-center">
           <div className="w-8 h-8 border-2 border-brand-400 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
           <p className="text-sm text-gray-500">ログイン中…</p>
+        </div>
+      </div>
+    );
+  }
+
+  // トークンモード: savedNameあり & 別の名前入力前 → 名前確認UI
+  if (tokenMode && savedName && !useDifferent) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-brand-50 via-white to-brand-50 p-4">
+        <div className="w-full max-w-sm">
+          <div className="flex flex-col items-center mb-8">
+            {iconButton}
+            <h1 className="text-xl font-bold text-gray-900">名前変更</h1>
+            <p className="text-sm text-gray-500 mt-1">管理者から発行された変更リンクです</p>
+            {tokenForMember && (
+              <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5 mt-2">
+                このリンクは「{tokenForMember}」さん用に発行されました
+              </p>
+            )}
+          </div>
+          <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-6 space-y-4">
+            <div className="bg-brand-50 rounded-xl p-4 text-center">
+              <p className="text-xs text-gray-400 mb-1">現在の名前</p>
+              <p className="text-2xl font-bold text-gray-900">{savedName}</p>
+            </div>
+            <Button
+              size="lg"
+              className="w-full"
+              disabled={saving}
+              onClick={() => handleConfirm(savedName)}
+            >
+              {saving ? '確認中…' : `${savedName} のまま続ける`}
+            </Button>
+            <button
+              type="button"
+              onClick={() => { setUseDifferent(true); setValue(''); }}
+              className="w-full text-sm text-brand-600 hover:text-brand-800 py-2 transition-colors"
+            >
+              名前を変更する →
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -162,7 +260,7 @@ export function NameSetupPage() {
             {saving ? '保存中…' : '次へ'}
             {!saving && <ArrowRight className="w-4 h-4" />}
           </Button>
-          {devMode && savedName && (
+          {(devMode || tokenMode) && savedName && (
             <button
               type="button"
               onClick={() => setUseDifferent(false)}
