@@ -114,3 +114,13 @@ export interface DeletedBoardPublic extends BoardPublic {
 export interface DeletedBoardPrivate extends BoardPrivate {
   deletedAt: number;
 }
+
+// calendarEvents: 管理者設定のカレンダーイベント（定休日・臨時休業など）
+export interface CalendarEvent {
+  id: string;
+  date: string; // YYYY-MM-DD
+  subject: string;
+  note?: string;
+  createdAt: number;
+  createdBy: string;
+}

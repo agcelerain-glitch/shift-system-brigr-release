@@ -4,7 +4,7 @@
 
 import { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import type { Shift } from '../lib/types';
+import type { Shift, CalendarEvent } from '../lib/types';
 import { TEMPLATE_TIMES } from '../lib/types';
 import {
   getTwoWeekGrid, getWeekStart, getWeekLabel, addDays, todayStr, formatDateJP, displayTime,
@@ -70,10 +70,12 @@ export function MonthCalendar({
   shifts,
   onSelectDate,
   memberColors,
+  events = [],
 }: {
   shifts: Shift[];
   onSelectDate?: (date: string) => void;
   memberColors?: Record<string, MemberColor>;
+  events?: CalendarEvent[];
 }) {
   const today = todayStr();
   // 今日が属する週の日曜日を初期値にする
@@ -90,9 +92,16 @@ export function MonthCalendar({
     return map;
   }, [shifts]);
 
+  const eventsByDate = useMemo(() => {
+    const map: Record<string, CalendarEvent[]> = {};
+    events.forEach((e) => { (map[e.date] ??= []).push(e); });
+    return map;
+  }, [events]);
+
   const hasUnavailable = useMemo(() => shifts.some((s) => s.timeType === 'none'), [shifts]);
   const hasPlan      = useMemo(() => shifts.some((s) => s.status === 'plan' && s.timeType !== 'none'), [shifts]);
   const hasReviewed  = useMemo(() => shifts.some((s) => s.status === 'reviewed'), [shifts]);
+  const hasEvents    = events.length > 0;
 
   const moveWeek = (delta: number) => setWeekStart((ws) => addDays(ws, delta * 7));
   const goToday  = () => setWeekStart(getWeekStart(todayStr()));
@@ -101,6 +110,7 @@ export function MonthCalendar({
     const d = new Date(date + 'T00:00:00');
     const isToday = date === today;
     const dayShifts = byDate[date] ?? [];
+    const dayEvents = eventsByDate[date] ?? [];
     const dow = d.getDay();
     // 月初のみ「8/1」形式、それ以外は日のみ
     const dayLabel = d.getDate() === 1 ? `${d.getMonth() + 1}/${d.getDate()}` : String(d.getDate());
@@ -124,19 +134,33 @@ export function MonthCalendar({
           }
         </div>
         <div className="space-y-0.5">
-          {dayShifts.slice(0, 3).map((s) => {
-            const isUnavailable = s.timeType === 'none';
-            const { style, cls } = getShiftStyle(s, memberColors?.[s.place ?? '']);
-            const label = isUnavailable ? `${s.memberName.split(' ')[0]} 不可` : s.subject;
+          {dayEvents.map((ev) => (
+            <div key={ev.id} className="text-[10px] leading-tight px-1 py-0.5 rounded truncate bg-red-100 text-red-700 font-semibold" title={ev.subject}>
+              {ev.subject}
+            </div>
+          ))}
+          {(() => {
+            const remaining = 3 - dayEvents.length;
+            const sliced = remaining > 0 ? dayShifts.slice(0, remaining) : [];
+            const extraCount = dayShifts.length - sliced.length;
             return (
-              <div key={s.id} className={cls} style={style} title={`${s.memberName} ${s.subject}`}>
-                {label}
-              </div>
+              <>
+                {sliced.map((s) => {
+                  const isUnavailable = s.timeType === 'none';
+                  const { style, cls } = getShiftStyle(s, memberColors?.[s.place ?? '']);
+                  const label = isUnavailable ? `${s.memberName.split(' ')[0]} 不可` : s.subject;
+                  return (
+                    <div key={s.id} className={cls} style={style} title={`${s.memberName} ${s.subject}`}>
+                      {label}
+                    </div>
+                  );
+                })}
+                {extraCount > 0 && (
+                  <div className="text-[10px] text-gray-400 px-1">他{extraCount}件</div>
+                )}
+              </>
             );
-          })}
-          {dayShifts.length > 3 && (
-            <div className="text-[10px] text-gray-400 px-1">他{dayShifts.length - 3}件</div>
-          )}
+          })()}
         </div>
       </button>
     );
@@ -220,6 +244,11 @@ export function MonthCalendar({
             )}
           </>
         )}
+        {hasEvents && (
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block px-1.5 py-0 rounded text-[10px] font-semibold bg-red-100 text-red-700">定休日等</span>
+          </span>
+        )}
         <span className="flex items-center gap-1.5">
           <span className="inline-block w-3 h-3 rounded-full ring-2 ring-today-ring" />
           <span className="text-gray-500">当日</span>
@@ -230,7 +259,7 @@ export function MonthCalendar({
 }
 
 // 日付タップ時の詳細リスト: 場所でグループ化し区切り線表示、グループ内は時間>名前順
-export function DayShiftList({ date, shifts }: { date: string; shifts: Shift[] }) {
+export function DayShiftList({ date, shifts, events = [] }: { date: string; shifts: Shift[]; events?: CalendarEvent[] }) {
   const placeGroups = useMemo(() => {
     const sorted = [...shifts].sort((a, b) => {
       // 場所未設定（空・undefined）は最下位
@@ -289,9 +318,22 @@ export function DayShiftList({ date, shifts }: { date: string; shifts: Shift[] }
   return (
     <div className="space-y-2">
       <p className="text-sm font-medium text-gray-700">{formatDateJP(date)} のシフト</p>
-      {placeGroups.length === 0 ? (
+      {events.length > 0 && (
+        <div className="space-y-1.5">
+          {events.map((ev) => (
+            <div key={ev.id} className="flex items-start gap-2 p-3 rounded-lg bg-red-50 border border-red-100">
+              <Badge color="red">イベント</Badge>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-red-800">{ev.subject}</p>
+                {ev.note && <p className="text-xs text-red-500 mt-0.5">{ev.note}</p>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {placeGroups.length === 0 && events.length === 0 ? (
         <p className="text-sm text-gray-400">この日のシフトはありません</p>
-      ) : (
+      ) : placeGroups.length === 0 ? null : (
         placeGroups.map((group) => (
           <div key={group.place}>
             <div className="flex items-center gap-2 my-2">

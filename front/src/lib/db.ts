@@ -21,7 +21,7 @@ import {
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured, API_BASE_URL } from './firebase';
 import { mockStore } from './mockStore';
-import type { Shift, Member, BoardPublic, BoardPrivate, ApprovalLog, DeletedBoardPublic, DeletedBoardPrivate, ShiftStatus, TimeType, TemplateCode, Role, ShiftRequest, ShiftRequestInvite, ShiftRequestStatus, InviteResponse } from './types';
+import type { Shift, Member, BoardPublic, BoardPrivate, ApprovalLog, DeletedBoardPublic, DeletedBoardPrivate, ShiftStatus, TimeType, TemplateCode, Role, ShiftRequest, ShiftRequestInvite, ShiftRequestStatus, InviteResponse, CalendarEvent } from './types';
 
 const now = () => Date.now();
 const toMs = (t: unknown): number => {
@@ -634,4 +634,33 @@ export async function verifyNameChangeToken(token: string): Promise<NameChangeTo
 export async function markNameChangeTokenUsed(token: string): Promise<void> {
   if (!isFirebaseConfigured || !db) return;
   await updateDoc(doc(db, 'nameChangeTokens', token), { used: true });
+}
+
+// ---- calendarEvents ----
+export function subscribeCalendarEvents(cb: (items: CalendarEvent[]) => void): () => void {
+  if (!isFirebaseConfigured || !db) return () => {};
+  return subscribeReal<CalendarEvent>(
+    query(collection(db, 'calendarEvents'), orderBy('date', 'asc')),
+    (r) => ({
+      id: r.id as string,
+      date: r.date as string,
+      subject: r.subject as string,
+      note: r.note as string | undefined,
+      createdAt: toMs(r.createdAt),
+      createdBy: r.createdBy as string,
+    }),
+    cb,
+  );
+}
+
+export async function addCalendarEvent(subject: string, date: string, note: string | undefined, adminName: string): Promise<void> {
+  if (!isFirebaseConfigured || !db) return;
+  const data: Record<string, unknown> = { date, subject, createdAt: serverTimestamp(), createdBy: adminName };
+  if (note) data.note = note;
+  await addDoc(collection(db, 'calendarEvents'), data);
+}
+
+export async function deleteCalendarEvent(id: string): Promise<void> {
+  if (!isFirebaseConfigured || !db) return;
+  await deleteDoc(doc(db, 'calendarEvents', id));
 }

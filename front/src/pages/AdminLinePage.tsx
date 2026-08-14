@@ -60,7 +60,7 @@ function formatShortDate(dateStr: string): string {
 }
 
 export function AdminLinePage() {
-  const { members, shifts, shiftRequests } = useData();
+  const { members, shifts, shiftRequests, calendarEvents } = useData();
   const { name: adminName } = useAuth();
   const toast = useToast();
   const [sending, setSending] = useState(false);
@@ -1075,7 +1075,7 @@ export function AdminLinePage() {
             </button>
           ))}
         </div>
-        <MonthCalendar shifts={calShifts} onSelectDate={setCalSelected} />
+        <MonthCalendar shifts={calShifts} onSelectDate={setCalSelected} events={calendarEvents} />
       </div>
 
       {/* カレンダー日付クリック時のシフト詳細 */}
@@ -1084,7 +1084,7 @@ export function AdminLinePage() {
         onClose={() => setCalSelected(null)}
         title={calSelected ? formatDateJP(calSelected) : ''}
       >
-        {calSelected && <DayShiftList date={calSelected} shifts={calSelectedShifts} />}
+        {calSelected && <DayShiftList date={calSelected} shifts={calSelectedShifts} events={calendarEvents.filter((e) => e.date === calSelected)} />}
       </Modal>
 
       {/* グループ送信② シフト連絡 確認ダイアログ */}

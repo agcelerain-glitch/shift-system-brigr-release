@@ -11,9 +11,10 @@ import {
   subscribeApprovalLogs,
   subscribeShiftRequests,
   subscribeShiftRequestInvites,
+  subscribeCalendarEvents,
 } from '../lib/db';
 import { useAuth } from './AuthContext';
-import type { Member, Shift, BoardPublic, BoardPrivate, ApprovalLog, DeletedBoardPublic, DeletedBoardPrivate, ShiftRequest, ShiftRequestInvite } from '../lib/types';
+import type { Member, Shift, BoardPublic, BoardPrivate, ApprovalLog, DeletedBoardPublic, DeletedBoardPrivate, ShiftRequest, ShiftRequestInvite, CalendarEvent } from '../lib/types';
 
 interface DataCtx {
   members: Member[];
@@ -25,6 +26,7 @@ interface DataCtx {
   approvalLogs: ApprovalLog[];
   shiftRequests: ShiftRequest[];
   shiftRequestInvites: ShiftRequestInvite[];
+  calendarEvents: CalendarEvent[];
   loaded: boolean;
   firestoreError: string | null;
   refresh: () => void;
@@ -43,6 +45,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [approvalLogs, setApprovalLogs] = useState<ApprovalLog[]>([]);
   const [shiftRequests, setShiftRequests] = useState<ShiftRequest[]>([]);
   const [shiftRequestInvites, setShiftRequestInvites] = useState<ShiftRequestInvite[]>([]);
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [firestoreError, setFirestoreError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -60,6 +63,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setApprovalLogs([]);
       setShiftRequests([]);
       setShiftRequestInvites([]);
+      setCalendarEvents([]);
       setLoaded(false);
       return;
     }
@@ -93,6 +97,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       safeSubscribe(subscribeApprovalLogs, setApprovalLogs, 'approvalLogs'),
       safeSubscribe(subscribeShiftRequests, setShiftRequests, 'shiftRequests'),
       safeSubscribe(subscribeShiftRequestInvites, setShiftRequestInvites, 'shiftRequestInvites'),
+      safeSubscribe(subscribeCalendarEvents, setCalendarEvents, 'calendarEvents'),
     ];
     // admin専用コレクション（削除済み掲示板）
     if (role === 'admin') {
@@ -107,7 +112,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [role, initializing, refreshKey]); // auth状態またはrefreshKeyが変わるたびに再購読
 
   return (
-    <Ctx.Provider value={{ members, shifts, boardPublic, boardPrivate, boardPublicDeleted, boardPrivateDeleted, approvalLogs, shiftRequests, shiftRequestInvites, loaded, firestoreError, refresh }}>
+    <Ctx.Provider value={{ members, shifts, boardPublic, boardPrivate, boardPublicDeleted, boardPrivateDeleted, approvalLogs, shiftRequests, shiftRequestInvites, calendarEvents, loaded, firestoreError, refresh }}>
       {children}
     </Ctx.Provider>
   );

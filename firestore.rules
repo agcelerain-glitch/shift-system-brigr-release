@@ -12,15 +12,30 @@ service cloud.firestore {
       return isSignedIn() &&
         (request.auth.token.role == 'user' || request.auth.token.role == 'admin');
     }
+    // field が存在しないか、存在する場合は string かつ maxLen 以下
+    function strMax(field, maxLen) {
+      return !(field in request.resource.data) ||
+        (request.resource.data[field] is string &&
+         request.resource.data[field].size() <= maxLen);
+    }
+    // field が必須: 存在・string・1文字以上・maxLen 以下
+    function strRequired(field, maxLen) {
+      return field in request.resource.data &&
+        request.resource.data[field] is string &&
+        request.resource.data[field].size() > 0 &&
+        request.resource.data[field].size() <= maxLen;
+    }
 
     // 名簿: 認証済みは読取/作成/更新可、削除はadminのみ
     // roleフィールドは自分のFirebase Authクレームと一致する値のみ書き込み可（昇格防止）
     match /members/{memberId} {
       allow read: if isUserOrAdmin();
       allow create: if isUserOrAdmin() &&
+        strRequired('name', 15) &&
         (!('role' in request.resource.data) ||
           request.resource.data.role == request.auth.token.role);
       allow update: if isUserOrAdmin() &&
+        strMax('name', 15) &&
         (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']) ||
           // roleが変更される場合: 自分のクレームと一致 かつ 既存がadminでない（admin→user降格を防止）
           (request.resource.data.role == request.auth.token.role &&
@@ -29,23 +44,31 @@ service cloud.firestore {
     }
 
     // シフト: 認証済みは読取/作成可、更新はadminのみ（承認・調整）
-    // 例外: userは自分の確定シフトをdelete_requestedに変更可（削除依頼）
-    // 削除: planはuser/admin両方可（キャンセル）、delete_requestedはadminのみ可
+    // 例外: userは確定シフトをdelete_requestedに変更可（急な予定変更のため locked 後も常に許可）
+    // 削除: planかつlocked=falseのみuser可（キャンセル）、locked=trueはadminのみ
     match /shifts/{shiftId} {
       allow read: if isUserOrAdmin();
-      allow create: if isUserOrAdmin();
+      allow create: if isUserOrAdmin() &&
+        strRequired('memberName', 15) &&
+        strMax('subject', 100) &&
+        strMax('place', 20);
       allow update: if isAdmin() ||
         (isUserOrAdmin() &&
          request.resource.data.status == 'delete_requested' &&
          resource.data.diff(request.resource.data).affectedKeys().hasOnly(['status', 'updatedAt', 'version']));
       allow delete: if isAdmin() ||
-        (isUserOrAdmin() && resource.data.status == 'plan');
+        (isUserOrAdmin() &&
+         resource.data.status == 'plan' &&
+         resource.data.get('locked', false) != true);
     }
 
     // 全体掲示板: 認証済みは読取可、adminのみ書込/削除
     match /boardPublic/{docId} {
       allow read: if isUserOrAdmin();
-      allow write: if isAdmin();
+      allow create, update: if isAdmin() &&
+        strMax('title', 100) &&
+        strMax('body', 2000);
+      allow delete: if isAdmin();
     }
 
     // admin非公開メモ: adminのみ読み書き
@@ -83,6 +106,25 @@ service cloud.firestore {
     match /shiftRequestInvites/{docId} {
       allow read: if isUserOrAdmin();
       allow write: if false; // バックエンドのFirebase Admin SDKのみ書込可
+    }
+
+    // カレンダーイベント（定休日・臨時休業等）: 認証済みは読取、adminのみ作成/削除
+    match /calendarEvents/{eventId} {
+      allow read: if isUserOrAdmin();
+      allow create: if isAdmin() &&
+        strRequired('subject', 50) &&
+        strRequired('date', 10);
+      allow delete: if isAdmin();
+    }
+
+    // 名前変更トークン: トークン64文字が実質シークレットなので全員読取可
+    // フロントからは used: false→true の更新のみ許可。発行・削除はAdmin SDKのみ
+    match /nameChangeTokens/{token} {
+      allow read: if true;
+      allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['used'])
+                   && request.resource.data.used == true
+                   && resource.data.used == false;
+      allow create, delete: if false;
     }
   }
 }

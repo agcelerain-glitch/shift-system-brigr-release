@@ -9,7 +9,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { Modal, Select, Button, Card } from '../components/ui';
 import { formatDateJP, displayTime } from '../lib/utils';
 import { respondToShiftRequestInvite } from '../lib/db';
-import type { MemberColor } from '../components/MonthCalendar';
 import { useToast } from '../contexts/ToastContext';
 import { Megaphone, BellPlus, ChevronDown, ChevronUp, CheckCircle2, XCircle, Clock, MapPin, MessageSquare, AlertTriangle } from 'lucide-react';
 import type { ShiftRequestInvite } from '../lib/types';
@@ -238,7 +237,7 @@ function InviteNoticeItem({ invite, myName, onDone }: {
 }
 
 export function CalendarPage() {
-  const { shifts, shiftRequestInvites } = useData();
+  const { shifts, shiftRequestInvites, calendarEvents } = useData();
   const { name: myName } = useAuth();
   const toast = useToast();
   const [selected, setSelected] = useState<string | null>(null);
@@ -310,14 +309,14 @@ export function CalendarPage() {
         </Select>
       </div>
 
-      <MonthCalendar shifts={filtered} onSelectDate={setSelected} memberColors={memberColors} />
+      <MonthCalendar shifts={filtered} onSelectDate={setSelected} memberColors={memberColors} events={calendarEvents} />
 
       <Modal
         open={selected !== null}
         onClose={() => setSelected(null)}
         title={selected ? formatDateJP(selected) : ''}
       >
-        {selected && <DayShiftList date={selected} shifts={selectedShifts} />}
+        {selected && <DayShiftList date={selected} shifts={selectedShifts} events={calendarEvents.filter((e) => e.date === selected)} />}
       </Modal>
     </UserLayout>
   );

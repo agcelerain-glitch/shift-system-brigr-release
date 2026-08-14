@@ -8,18 +8,19 @@ import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { Card, Button, Input, Textarea, Select, Badge, EmptyState, Tabs } from '../components/ui';
-import { Megaphone, Lock, Trash2, Plus, Bell, FileText, RotateCcw, AlertTriangle } from 'lucide-react';
+import { Megaphone, Lock, Trash2, Plus, Bell, FileText, RotateCcw, AlertTriangle, CalendarDays } from 'lucide-react';
 import {
   createBoardPublic, deleteBoardPublic, createBoardPrivate, deleteBoardPrivate,
   restoreBoardPublic, restoreBoardPrivate, permanentDeleteBoardPublic, permanentDeleteBoardPrivate,
+  addCalendarEvent, deleteCalendarEvent,
 } from '../lib/db';
-import { formatDateTimeJP } from '../lib/utils';
-import type { BoardPublic, BoardPrivate, DeletedBoardPublic, DeletedBoardPrivate } from '../lib/types';
+import { formatDateTimeJP, todayStr } from '../lib/utils';
+import type { BoardPublic, BoardPrivate, DeletedBoardPublic, DeletedBoardPrivate, CalendarEvent } from '../lib/types';
 
-type Tab = 'public' | 'private' | 'deleted';
+type Tab = 'public' | 'private' | 'event' | 'deleted';
 
 export function AdminBoardPage() {
-  const { boardPublic, boardPrivate, boardPublicDeleted, boardPrivateDeleted } = useData();
+  const { boardPublic, boardPrivate, boardPublicDeleted, boardPrivateDeleted, calendarEvents } = useData();
   const { name } = useAuth();
   const adminName = name ?? '管理者';
   const toast = useToast();
@@ -31,6 +32,10 @@ export function AdminBoardPage() {
   // private form
   const [prBody, setPrBody] = useState('');
   const [prType, setPrType] = useState<'memo' | 'notification'>('memo');
+  // event form
+  const [evSubject, setEvSubject] = useState('');
+  const [evDate, setEvDate] = useState(todayStr());
+  const [evNote, setEvNote] = useState('');
   // 完全削除の2重確認用: id を保持
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
@@ -50,6 +55,21 @@ export function AdminBoardPage() {
       toast.show(prType === 'memo' ? 'メモを保存しました' : '通知を記録しました', 'success');
       setPrBody('');
     } catch { toast.show('保存に失敗しました', 'error'); }
+  };
+
+  const submitEvent = async () => {
+    if (!evSubject.trim()) { toast.show('件名を入力してください', 'error'); return; }
+    if (!evDate) { toast.show('日付を選択してください', 'error'); return; }
+    try {
+      await addCalendarEvent(evSubject.trim(), evDate, evNote.trim() || undefined, adminName);
+      toast.show('イベントをカレンダーに追加しました', 'success');
+      setEvSubject(''); setEvNote('');
+    } catch { toast.show('追加に失敗しました', 'error'); }
+  };
+
+  const removeEvent = async (ev: CalendarEvent) => {
+    try { await deleteCalendarEvent(ev.id); toast.show('イベントを削除しました', 'info'); }
+    catch { toast.show('削除失敗', 'error'); }
   };
 
   // ソフトデリート（削除済タブへ移動）
@@ -100,6 +120,7 @@ export function AdminBoardPage() {
           tabs={[
             { id: 'public', label: '全体掲示板' },
             { id: 'private', label: '非公開メモ' },
+            { id: 'event', label: `イベント${calendarEvents.length > 0 ? `（${calendarEvents.length}）` : ''}` },
             { id: 'deleted', label: `削除済${deletedCount > 0 ? `（${deletedCount}）` : ''}` },
           ]}
           active={tab}
@@ -190,6 +211,62 @@ export function AdminBoardPage() {
                       <p className="text-xs text-gray-400 mt-2">{b.adminName} · {formatDateTimeJP(b.createdAt)}</p>
                     </div>
                     <button onClick={() => removePrivate(b)} className="text-gray-300 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50 transition">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </Card>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ===== イベント追加タブ ===== */}
+      {tab === 'event' && (
+        <div className="space-y-4">
+          <Card className="p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <CalendarDays className="w-5 h-5 text-red-600" />
+              <h2 className="font-semibold text-gray-900">カレンダーイベント追加</h2>
+              <Badge color="red">admin専用</Badge>
+            </div>
+            <p className="text-xs text-gray-500 mb-3">定休日・臨時休業など、シフト表の上位に表示されるイベントを設定します。名前不要。</p>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">日付</label>
+                <Input type="date" value={evDate} onChange={(e) => setEvDate(e.target.value)} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">件名（カレンダーに表示）</label>
+                <Input value={evSubject} onChange={(e) => setEvSubject(e.target.value)} placeholder="例: 定休日、臨時休業" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">備考（任意）</label>
+                <Input value={evNote} onChange={(e) => setEvNote(e.target.value)} placeholder="例: 設備点検のため" />
+              </div>
+              <div className="flex justify-end">
+                <Button onClick={submitEvent}><Plus className="w-4 h-4" />追加</Button>
+              </div>
+            </div>
+          </Card>
+
+          <div className="space-y-2">
+            {calendarEvents.length === 0 ? (
+              <Card className="p-6"><EmptyState icon={<CalendarDays className="w-10 h-10" />} title="イベントはありません" /></Card>
+            ) : (
+              calendarEvents.map((ev) => (
+                <Card key={ev.id} className="p-4 border-red-100">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Badge color="red">イベント</Badge>
+                        <span className="text-xs font-medium text-gray-500">{ev.date}</span>
+                      </div>
+                      <p className="text-sm font-semibold text-gray-900">{ev.subject}</p>
+                      {ev.note && <p className="text-xs text-gray-500 mt-0.5">{ev.note}</p>}
+                      <p className="text-xs text-gray-400 mt-1">{ev.createdBy} · 追加</p>
+                    </div>
+                    <button onClick={() => removeEvent(ev)} className="text-gray-300 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50 transition" title="削除">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
