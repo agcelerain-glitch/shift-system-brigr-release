@@ -436,6 +436,16 @@ export async function deleteGroupId(): Promise<void> {
   }, { merge: true });
 }
 
+// フロントエンドエラーをバックエンド経由でDiscord/LINEへ報告
+function reportFrontendError(source: string, context: string, errMsg: string): void {
+  if (!API_BASE_URL) return;
+  fetch(`${API_BASE_URL}/error/report`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source, context, error: errMsg, userAgent: navigator.userAgent }),
+  }).catch(() => {});
+}
+
 // LINE API（Heroku）へのfetchラッパー。トークンはフロントに置かない
 export async function callLineApi(path: string, body: Record<string, unknown>): Promise<{ ok: boolean; message: string }> {
   if (!API_BASE_URL) {
@@ -460,6 +470,9 @@ export async function callLineApi(path: string, body: Record<string, unknown>): 
       if (!res.ok) return { ok: false, message: `HTTP ${res.status}` };
       return { ok: true, message: '送信しました（再試行成功）' };
     } catch (e) {
+      const msg = (e as Error)?.message ?? String(e);
+      // 両回とも失敗 → バックエンド経由でDiscord/LINEへ自動報告
+      reportFrontendError('frontend-line-api', path, msg);
       return { ok: false, message: 'サーバーに接続できません。数秒後に再度送信してください。' };
     }
   }

@@ -1,6 +1,6 @@
 // 管理者用レイアウト: ダークトーン・調整管理モード
 
-import { type ReactNode, useEffect } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { API_BASE_URL } from '../lib/firebase';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -27,10 +27,14 @@ export function AdminLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const { refreshing } = usePullToRefresh(refresh);
 
-  // Herokuダイノのスリープ解除（管理者ページ表示時に事前ping）
+  const [herokuOnline, setHerokuOnline] = useState<boolean | null>(null);
+
+  // Herokuダイノのスリープ解除 + 接続状態確認
   useEffect(() => {
-    if (!API_BASE_URL) return;
-    fetch(`${API_BASE_URL}/health`).catch(() => {});
+    if (!API_BASE_URL) { setHerokuOnline(true); return; }
+    fetch(`${API_BASE_URL}/health`)
+      .then((r) => setHerokuOnline(r.ok))
+      .catch(() => setHerokuOnline(false));
   }, []);
 
   const handleSignOut = async () => {
@@ -63,6 +67,17 @@ export function AdminLayout({ children }: { children: ReactNode }) {
               </span>
             )}
           </button>
+          {/* Heroku接続状態バッジ */}
+          {herokuOnline === false && (
+            <span className="flex items-center gap-1 text-xs text-red-300 bg-red-900/60 border border-red-700 px-2 py-0.5 rounded-full">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+              <span className="hidden sm:inline">サーバー接続失敗</span>
+              <span className="sm:hidden">×</span>
+            </span>
+          )}
+          {herokuOnline === true && (
+            <span className="w-2 h-2 rounded-full bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.6)]" title="サーバー接続OK" />
+          )}
           <div className="flex items-center gap-1">
             <button
               onClick={handleGoToUser}
