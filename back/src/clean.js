@@ -7,15 +7,18 @@
  *   頻度: Daily / 03:00 AM UTC (JST 12:00 PM)
  *
  * 削除対象（閾値日数を超えたもの）:
- *   - shifts              : date フィールド ("YYYY-MM-DD") で判定
- *   - boardPublicDeleted  : deletedAt Timestamp で判定
- *   - boardPrivateDeleted : deletedAt Timestamp で判定
- *   - approvalLogs        : createdAt Timestamp で判定
+ *   - shifts              : date フィールド ("YYYY-MM-DD") で判定  ← CLEAN_THRESHOLD_DAYS (22日)
+ *   - boardPublicDeleted  : deletedAt Timestamp で判定             ← CLEAN_THRESHOLD_DAYS (22日)
+ *   - boardPrivateDeleted : deletedAt Timestamp で判定             ← CLEAN_THRESHOLD_DAYS (22日)
+ *   - approvalLogs        : createdAt Timestamp で判定             ← CLEAN_THRESHOLD_DAYS (22日)
+ *   - shiftRequests       : date フィールド ("YYYY-MM-DD") で判定  ← CLEAN_INVITE_THRESHOLD_DAYS (35日)
+ *   - shiftRequestInvites : date フィールド ("YYYY-MM-DD") で判定  ← CLEAN_INVITE_THRESHOLD_DAYS (35日)
  *
  * 環境変数:
- *   CLEAN_THRESHOLD_DAYS  : 削除閾値（日数）。未設定時は 22 日
- *   LINE_SELF_USER_ID     : 通知先 LINE ユーザーID（設定時のみ通知）
- *   CHANNEL_ACCESS_TOKEN  : LINE Messaging API トークン
+ *   CLEAN_THRESHOLD_DAYS        : 削除閾値（日数）。未設定時は 22 日
+ *   CLEAN_INVITE_THRESHOLD_DAYS : 出勤依頼系の削除閾値（日数）。未設定時は 35 日
+ *   LINE_SELF_USER_ID           : 通知先 LINE ユーザーID（設定時のみ通知）
+ *   CHANNEL_ACCESS_TOKEN        : LINE Messaging API トークン
  *
  * オプション:
  *   --dry-run  : 削除せず対象件数のみ表示（動作確認用・LINE通知なし）
@@ -26,6 +29,7 @@ const { messagingApi } = require('@line/bot-sdk');
 
 const DRY_RUN = process.argv.includes('--dry-run');
 const THRESHOLD_DAYS = parseInt(process.env.CLEAN_THRESHOLD_DAYS ?? '22', 10);
+const INVITE_THRESHOLD_DAYS = parseInt(process.env.CLEAN_INVITE_THRESHOLD_DAYS ?? '35', 10);
 
 function parseFirebasePrivateKey(raw) {
   if (!raw) return null;
@@ -123,6 +127,36 @@ async function processOldShifts(cutoffDate) {
   return snap.size;
 }
 
+// shiftRequests: date フィールド (YYYY-MM-DD) で判定
+async function processOldShiftRequests(cutoffDate) {
+  const cutoffStr = toUTCDateStr(cutoffDate);
+  const snap = await db.collection('shiftRequests').where('date', '<', cutoffStr).get();
+  if (snap.empty) { console.log('[clean] shiftRequests: 対象なし'); return 0; }
+  if (DRY_RUN) {
+    console.log(`[clean][DRY-RUN] shiftRequests: ${snap.size}件が削除対象 (date < ${cutoffStr})`);
+    snap.docs.forEach((d) => console.log(`  - ${d.id}: date=${d.data().date} place=${d.data().place}`));
+    return snap.size;
+  }
+  await batchDelete(snap.docs);
+  console.log(`[clean] shiftRequests: ${snap.size}件削除 (date < ${cutoffStr})`);
+  return snap.size;
+}
+
+// shiftRequestInvites: date フィールド (YYYY-MM-DD) で判定
+async function processOldShiftRequestInvites(cutoffDate) {
+  const cutoffStr = toUTCDateStr(cutoffDate);
+  const snap = await db.collection('shiftRequestInvites').where('date', '<', cutoffStr).get();
+  if (snap.empty) { console.log('[clean] shiftRequestInvites: 対象なし'); return 0; }
+  if (DRY_RUN) {
+    console.log(`[clean][DRY-RUN] shiftRequestInvites: ${snap.size}件が削除対象 (date < ${cutoffStr})`);
+    snap.docs.forEach((d) => console.log(`  - ${d.id}: date=${d.data().date} member=${d.data().memberName}`));
+    return snap.size;
+  }
+  await batchDelete(snap.docs);
+  console.log(`[clean] shiftRequestInvites: ${snap.size}件削除 (date < ${cutoffStr})`);
+  return snap.size;
+}
+
 // Timestamp フィールドで判定する汎用処理
 async function processByTimestamp(collectionName, field, cutoffDate) {
   const cutoff = admin.firestore.Timestamp.fromDate(cutoffDate);
@@ -139,24 +173,30 @@ async function processByTimestamp(collectionName, field, cutoffDate) {
 
 async function main() {
   const cutoffDate = new Date(Date.now() - THRESHOLD_DAYS * 24 * 60 * 60 * 1000);
+  const inviteCutoffDate = new Date(Date.now() - INVITE_THRESHOLD_DAYS * 24 * 60 * 60 * 1000);
   const mode = DRY_RUN ? '[DRY-RUN] ' : '';
-  console.log(`[clean] ${mode}開始 — ${THRESHOLD_DAYS}日以前 (${toUTCDateStr(cutoffDate)}) のデータを対象`);
+  console.log(`[clean] ${mode}開始`);
+  console.log(`[clean]   通常データ: ${THRESHOLD_DAYS}日以前 (${toUTCDateStr(cutoffDate)}) を対象`);
+  console.log(`[clean]   出勤依頼系: ${INVITE_THRESHOLD_DAYS}日以前 (${toUTCDateStr(inviteCutoffDate)}) を対象`);
 
   try {
-    const [s, bp, bpv, al] = await Promise.all([
+    // 出勤依頼は子(Invites)→親(Requests)の順に削除（孤立防止）
+    const [s, bp, bpv, al, sri, sr] = await Promise.all([
       processOldShifts(cutoffDate),
       processByTimestamp('boardPublicDeleted', 'deletedAt', cutoffDate),
       processByTimestamp('boardPrivateDeleted', 'deletedAt', cutoffDate),
       processByTimestamp('approvalLogs', 'createdAt', cutoffDate),
+      processOldShiftRequestInvites(inviteCutoffDate),
+      processOldShiftRequests(inviteCutoffDate),
     ]);
-    const total = s + bp + bpv + al;
+    const total = s + bp + bpv + al + sri + sr;
     const label = DRY_RUN ? '対象' : '削除';
-    console.log(`[clean] ${mode}完了 — 合計 ${total}件${label} (shifts:${s} boardPublicDeleted:${bp} boardPrivateDeleted:${bpv} approvalLogs:${al})`);
+    console.log(`[clean] ${mode}完了 — 合計 ${total}件${label} (shifts:${s} boardPublicDeleted:${bp} boardPrivateDeleted:${bpv} approvalLogs:${al} shiftRequestInvites:${sri} shiftRequests:${sr})`);
 
     // 実削除があった場合のみ LINE 通知（0件はスキップして静音）
     if (!DRY_RUN && total > 0) {
       await notifyLine(
-        `[定期クリーン完了]\n${nowJST()}\n\n合計 ${total}件削除\n・シフト: ${s}件\n・掲示板削除済: ${bp + bpv}件\n・承認ログ: ${al}件\n（${THRESHOLD_DAYS}日以前のデータ）`
+        `[定期クリーン完了]\n${nowJST()}\n\n合計 ${total}件削除\n・シフト: ${s}件\n・掲示板削除済: ${bp + bpv}件\n・承認ログ: ${al}件\n・出勤依頼記録: ${sri + sr}件\n（通常 ${THRESHOLD_DAYS}日 / 依頼系 ${INVITE_THRESHOLD_DAYS}日 以前）`
       );
     }
   } catch (e) {
