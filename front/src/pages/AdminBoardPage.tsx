@@ -38,6 +38,8 @@ export function AdminBoardPage() {
   const [evNote, setEvNote] = useState('');
   // 完全削除の2重確認用: id を保持
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  // 行事等削除の2重確認用
+  const [confirmEventDeleteId, setConfirmEventDeleteId] = useState<string | null>(null);
 
   const submitPublic = async () => {
     if (!pTitle.trim() || !pBody.trim()) { toast.show('タイトル・本文を入力してください', 'error'); return; }
@@ -62,14 +64,21 @@ export function AdminBoardPage() {
     if (!evDate) { toast.show('日付を選択してください', 'error'); return; }
     try {
       await addCalendarEvent(evSubject.trim(), evDate, evNote.trim() || undefined, adminName);
-      toast.show('イベントをカレンダーに追加しました', 'success');
+      toast.show('行事等をカレンダーに追加しました', 'success');
       setEvSubject(''); setEvNote('');
     } catch { toast.show('追加に失敗しました', 'error'); }
   };
 
-  const removeEvent = async (ev: CalendarEvent) => {
-    try { await deleteCalendarEvent(ev.id); toast.show('イベントを削除しました', 'info'); }
-    catch { toast.show('削除失敗', 'error'); }
+  const handleDeleteEvent = async (id: string) => {
+    if (confirmEventDeleteId !== id) {
+      setConfirmEventDeleteId(id);
+      return;
+    }
+    try {
+      await deleteCalendarEvent(id);
+      toast.show('行事等を削除しました', 'info');
+      setConfirmEventDeleteId(null);
+    } catch { toast.show('削除失敗', 'error'); }
   };
 
   // ソフトデリート（削除済タブへ移動）
@@ -120,7 +129,7 @@ export function AdminBoardPage() {
           tabs={[
             { id: 'public', label: '全体掲示板' },
             { id: 'private', label: '非公開メモ' },
-            { id: 'event', label: `イベント${calendarEvents.length > 0 ? `（${calendarEvents.length}）` : ''}` },
+            { id: 'event', label: `行事等${calendarEvents.length > 0 ? `（${calendarEvents.length}）` : ''}` },
             { id: 'deleted', label: `削除済${deletedCount > 0 ? `（${deletedCount}）` : ''}` },
           ]}
           active={tab}
@@ -221,16 +230,16 @@ export function AdminBoardPage() {
         </div>
       )}
 
-      {/* ===== イベント追加タブ ===== */}
+      {/* ===== 行事等タブ ===== */}
       {tab === 'event' && (
         <div className="space-y-4">
           <Card className="p-5">
             <div className="flex items-center gap-2 mb-3">
               <CalendarDays className="w-5 h-5 text-red-600" />
-              <h2 className="font-semibold text-gray-900">カレンダーイベント追加</h2>
+              <h2 className="font-semibold text-gray-900">行事等を追加</h2>
               <Badge color="red">admin専用</Badge>
             </div>
-            <p className="text-xs text-gray-500 mb-3">定休日・臨時休業など、シフト表の上位に表示されるイベントを設定します。名前不要。</p>
+            <p className="text-xs text-gray-500 mb-3">定休日・臨時休業など、シフト表の上位に表示される行事等を設定します。名前不要。</p>
             <div className="space-y-3">
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">日付</label>
@@ -252,23 +261,39 @@ export function AdminBoardPage() {
 
           <div className="space-y-2">
             {calendarEvents.length === 0 ? (
-              <Card className="p-6"><EmptyState icon={<CalendarDays className="w-10 h-10" />} title="イベントはありません" /></Card>
+              <Card className="p-6"><EmptyState icon={<CalendarDays className="w-10 h-10" />} title="行事等はありません" /></Card>
             ) : (
               calendarEvents.map((ev) => (
                 <Card key={ev.id} className="p-4 border-red-100">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
-                        <Badge color="red">イベント</Badge>
+                        <Badge color="red">行事等</Badge>
                         <span className="text-xs font-medium text-gray-500">{ev.date}</span>
                       </div>
                       <p className="text-sm font-semibold text-gray-900">{ev.subject}</p>
                       {ev.note && <p className="text-xs text-gray-500 mt-0.5">{ev.note}</p>}
                       <p className="text-xs text-gray-400 mt-1">{ev.createdBy} · 追加</p>
                     </div>
-                    <button onClick={() => removeEvent(ev)} className="text-gray-300 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50 transition" title="削除">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex flex-col gap-1.5 shrink-0">
+                      {confirmEventDeleteId === ev.id ? (
+                        <div className="flex flex-col gap-1">
+                          <Button size="sm" variant="danger" onClick={() => handleDeleteEvent(ev.id)}>
+                            <AlertTriangle className="w-3.5 h-3.5" />本当に削除
+                          </Button>
+                          <button
+                            onClick={() => setConfirmEventDeleteId(null)}
+                            className="text-xs text-gray-400 hover:text-gray-600 text-center py-0.5"
+                          >
+                            キャンセル
+                          </button>
+                        </div>
+                      ) : (
+                        <Button size="sm" variant="danger" onClick={() => handleDeleteEvent(ev.id)}>
+                          <Trash2 className="w-3.5 h-3.5" />削除
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </Card>
               ))

@@ -246,7 +246,7 @@ export function MonthCalendar({
         )}
         {hasEvents && (
           <span className="flex items-center gap-1.5">
-            <span className="inline-block px-1.5 py-0 rounded text-[10px] font-semibold bg-red-100 text-red-700">定休日等</span>
+            <span className="inline-block px-1.5 py-0 rounded text-[10px] font-semibold bg-red-100 text-red-700">行事等</span>
           </span>
         )}
         <span className="flex items-center gap-1.5">
@@ -322,7 +322,7 @@ export function DayShiftList({ date, shifts, events = [] }: { date: string; shif
         <div className="space-y-1.5">
           {events.map((ev) => (
             <div key={ev.id} className="flex items-start gap-2 p-3 rounded-lg bg-red-50 border border-red-100">
-              <Badge color="red">イベント</Badge>
+              <Badge color="red">行事等</Badge>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-red-800">{ev.subject}</p>
                 {ev.note && <p className="text-xs text-red-500 mt-0.5">{ev.note}</p>}
