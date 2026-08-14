@@ -443,16 +443,25 @@ export async function callLineApi(path: string, body: Record<string, unknown>): 
     await new Promise((r) => setTimeout(r, 400));
     return { ok: true, message: `[モック] ${path} へ送信しました` };
   }
+  const doFetch = () => fetch(`${API_BASE_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
   try {
-    const res = await fetch(`${API_BASE_URL}${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+    const res = await doFetch();
     if (!res.ok) return { ok: false, message: `HTTP ${res.status}` };
     return { ok: true, message: '送信しました' };
-  } catch (e) {
-    return { ok: false, message: (e as Error).message };
+  } catch {
+    // ネットワークエラー（Herokuスリープ起動中など）は3秒待って1回リトライ
+    await new Promise((r) => setTimeout(r, 3000));
+    try {
+      const res = await doFetch();
+      if (!res.ok) return { ok: false, message: `HTTP ${res.status}` };
+      return { ok: true, message: '送信しました（再試行成功）' };
+    } catch (e) {
+      return { ok: false, message: 'サーバーに接続できません。数秒後に再度送信してください。' };
+    }
   }
 }
 

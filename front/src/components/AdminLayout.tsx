@@ -1,7 +1,8 @@
 // 管理者用レイアウト: ダークトーン・調整管理モード
 
-import type { ReactNode } from 'react';
+import { type ReactNode, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
+import { API_BASE_URL } from '../lib/firebase';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import type { IconDefinition } from '@fortawesome/fontawesome-svg-core';
 import {
@@ -25,6 +26,12 @@ export function AdminLayout({ children }: { children: ReactNode }) {
   const { refresh } = useData();
   const navigate = useNavigate();
   const { refreshing } = usePullToRefresh(refresh);
+
+  // Herokuダイノのスリープ解除（管理者ページ表示時に事前ping）
+  useEffect(() => {
+    if (!API_BASE_URL) return;
+    fetch(`${API_BASE_URL}/health`).catch(() => {});
+  }, []);
 
   const handleSignOut = async () => {
     await signOut();
