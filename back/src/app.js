@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
+const https = require('https');
 const { messagingApi, validateSignature } = require('@line/bot-sdk');
 const admin = require('firebase-admin');
 
@@ -367,6 +368,25 @@ app.post('/line/dm', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// フロントエンドエラー受信 → Discord + LINE へ転送
+// PC・スマホ問わずフロント側で検知したエラーをここで受け取る
+app.post('/error/report', async (req, res) => {
+  try {
+    const { source, context, error: errMsg, userAgent } = req.body ?? {};
+    if (!errMsg) return res.status(400).json({ ok: false, message: 'error required' });
+    const ua = String(userAgent ?? 'unknown').slice(0, 150);
+    const text = `[フロントエンドエラー]\n発生元: ${source ?? 'frontend'}\n場所: ${context ?? 'unknown'}\nエラー: ${errMsg}\nUA: ${ua}\n時刻: ${new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}`;
+    console.error('[frontend error]', { source, context, error: errMsg, ua });
+    await notifyDiscord(text);
+    const selfId = process.env.LINE_SELF_USER_ID;
+    if (selfId) client.pushMessage({ to: selfId, messages: [{ type: 'text', text }] }).catch(() => {});
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[/error/report]', e?.message);
+    res.status(500).json({ ok: false });
+  }
+});
+
 // LINE Webhook受信
 app.post('/line/webhook', verifyLineSignature, async (req, res) => {
   res.sendStatus(200);
@@ -664,18 +684,58 @@ function buildRangeReply(dates, byDate, rangeLabel, queryName) {
 // エラー通知・グループ登録ヘルパー
 // ──────────────────────────────────────────────────────────
 
+// Discord Webhook通知（LINEとは独立して動作。LINEが壊れていても届く最後の砦）
+async function notifyDiscord(text) {
+  const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+  if (!webhookUrl) return;
+  return new Promise((resolve) => {
+    try {
+      const url = new URL(webhookUrl);
+      const body = JSON.stringify({
+        username: 'シフトシステム',
+        content: `\`\`\`\n${text.slice(0, 1900)}\n\`\`\``,
+      });
+      const req = https.request(
+        {
+          hostname: url.hostname,
+          path: url.pathname + url.search,
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+        },
+        (res) => {
+          res.resume();
+          if (res.statusCode >= 300) console.error('[notifyDiscord] HTTP:', res.statusCode);
+          resolve();
+        }
+      );
+      req.on('error', (e) => { console.error('[notifyDiscord] 送信失敗:', e.message); resolve(); });
+      req.write(body);
+      req.end();
+    } catch (e) {
+      console.error('[notifyDiscord] エラー:', e?.message ?? e);
+      resolve();
+    }
+  });
+}
+
+// エラー通知: Discord（常時）+ LINE（可能な場合）
+// LINE が壊れていても Discord に届くため、通知順序は Discord → LINE
 async function notifySelfError(context, eventType, errorMsg) {
-  const selfId = process.env.LINE_SELF_USER_ID;
-  const token = process.env.CHANNEL_ACCESS_TOKEN;
-  if (!selfId || !token) {
-    console.error('[notifySelfError] LINE_SELF_USER_ID または CHANNEL_ACCESS_TOKEN が未設定のため通知スキップ');
-    return;
-  }
   const text = `[システムエラー]\n場所: ${context}\nイベント: ${eventType}\nエラー: ${errorMsg}\n時刻: ${new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}`;
+
+  // Discord通知（LINEと独立。常に試みる）
+  await notifyDiscord(text);
+
+  // LINE通知
+  const selfId = process.env.LINE_SELF_USER_ID;
+  if (!selfId) { console.error('[notifySelfError] LINE_SELF_USER_ID未設定'); return; }
   try {
     await client.pushMessage({ to: selfId, messages: [{ type: 'text', text }] });
   } catch (e) {
-    console.error('[notifySelfError] LINE通知失敗:', e?.message ?? e);
+    const lineErr = e?.message ?? String(e);
+    console.error('[notifySelfError] LINE通知失敗:', lineErr);
+    // LINE失敗をDiscordへ追知（二重通知だがLINE障害の検知として有用）
+    await notifyDiscord(`⚠️ [LINE通知失敗]\n${lineErr}\n\n元エラー: ${context} / ${eventType}`);
   }
 }
 
