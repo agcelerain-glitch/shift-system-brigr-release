@@ -121,11 +121,19 @@ export function AdminLinePage() {
     () => [...new Set(todayShifts.filter((s) => s.status === 'confirmed').map((s) => s.memberName))],
     [todayShifts],
   );
-  // ポジション配置で選べる全メンバー（固定＋今日の確定、重複除く）
+  // ポジション配置で選べる全メンバー
+  // 場所選択時 → その場所の今日の確定メンバー＋固定メンバー、未選択時 → 全員
   const allPosMembers = useMemo(() => {
-    const set = new Set([...FIXED_MEMBERS, ...todayConfirmedMembers]);
-    return [...set];
-  }, [todayConfirmedMembers]);
+    if (posPlace && posPlace !== '__custom__') {
+      const placeConfirmed = [...new Set(
+        todayShifts
+          .filter((s) => s.status === 'confirmed' && s.place === posPlace)
+          .map((s) => s.memberName),
+      )];
+      return [...new Set([...FIXED_MEMBERS, ...placeConfirmed])];
+    }
+    return [...new Set([...FIXED_MEMBERS, ...todayConfirmedMembers])];
+  }, [todayConfirmedMembers, todayShifts, posPlace]);
 
   const lineMembers = members.filter((m) => m.lineUserId);
   const adminMember = members.find((m) => m.name === adminName);
@@ -623,7 +631,23 @@ export function AdminLinePage() {
             <label className="block text-xs font-semibold text-purple-700 mb-1">場所 <span className="text-purple-400 font-normal">（必須）</span></label>
             <Select
               value={posPlace}
-              onChange={(e) => { setPosPlace(e.target.value); setPosPlaceCustom(''); }}
+              onChange={(e) => {
+                const newPlace = e.target.value;
+                setPosPlace(newPlace);
+                setPosPlaceCustom('');
+                if (newPlace && newPlace !== '__custom__') {
+                  const allowed = new Set([
+                    ...FIXED_MEMBERS,
+                    ...todayShifts
+                      .filter((s) => s.status === 'confirmed' && s.place === newPlace)
+                      .map((s) => s.memberName),
+                  ]);
+                  setPosRows((prev) => prev.map((r) => ({
+                    ...r,
+                    selectedMembers: r.selectedMembers.filter((n) => allowed.has(n)),
+                  })));
+                }
+              }}
               className="border-2 border-purple-400 bg-purple-50 focus:ring-purple-400"
             >
               <option value="">（場所を選択）</option>
