@@ -27,7 +27,8 @@ service cloud.firestore {
     }
 
     // 名簿: 認証済みは読取/作成/更新可、削除はadminのみ
-    // roleフィールドは自分のFirebase Authクレームと一致する値のみ書き込み可（昇格防止）
+    // create: roleフィールドは自分のFirebase Authクレームと一致する値のみ書き込み可（昇格防止）
+    // update: roleフィールドは書き込み禁止（アプリコードはupdateDocでname/updatedAtのみ更新）
     match /members/{memberId} {
       allow read: if isUserOrAdmin();
       allow create: if isUserOrAdmin() &&
@@ -36,10 +37,7 @@ service cloud.firestore {
           request.resource.data.role == request.auth.token.role);
       allow update: if isUserOrAdmin() &&
         strMax('name', 15) &&
-        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']) ||
-          // roleが変更される場合: 自分のクレームと一致 かつ 既存がadminでない（admin→user降格を防止）
-          (request.resource.data.role == request.auth.token.role &&
-           resource.data.get('role', '') != 'admin'));
+        !('role' in request.writeFields);
       allow delete: if isAdmin();
     }
 
