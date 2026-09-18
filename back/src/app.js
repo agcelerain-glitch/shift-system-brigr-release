@@ -681,6 +681,76 @@ function buildRangeReply(dates, byDate, rangeLabel, queryName) {
 }
 
 // ──────────────────────────────────────────────────────────
+// 個人シフト確認機能（「シフト確認」キーワード対応）
+// ──────────────────────────────────────────────────────────
+
+// 今週（月曜日〜日曜日）の日付配列を返す（JST基準）
+function getThisWeek(today) {
+  const dow = today.getUTCDay(); // 0=日, 1=月, ..., 6=土
+  const daysFromMonday = dow === 0 ? 6 : dow - 1;
+  const monday = addDays(today, -daysFromMonday);
+  return Array.from({ length: 7 }, (_, i) => toDateStr(addDays(monday, i)));
+}
+
+// 個人向け今週確定シフトの返信文字列を生成
+function buildPersonalWeekReply(memberName, dates, byDate) {
+  const shiftLines = [];
+  for (const date of dates) {
+    const confirmed = (byDate[date]?.confirmed ?? []).filter(
+      (s) => normName(s.memberName) === normName(memberName)
+    );
+    for (const s of confirmed) {
+      const tl = getShiftTimeLabel(s);
+      const dateLabel = formatDateShort(date);
+      shiftLines.push(tl ? `${dateLabel} ${tl}` : dateLabel);
+    }
+  }
+
+  const weekStart = formatDateShort(dates[0]);
+  const weekEnd = formatDateShort(dates[6]);
+
+  if (shiftLines.length === 0) {
+    return `${memberName}さんの今週（${weekStart}〜${weekEnd}）の確定シフトはありません。`;
+  }
+
+  return [`${memberName}さんの今週のシフトです。`, ...shiftLines].join('\n');
+}
+
+// 「シフト確認」ハンドラ（lineUserIdでメンバー検索 → 個人の今週確定シフトを返信）
+async function handleShiftCheck(lineUserId, replyToken, db) {
+  if (!db) {
+    await client.replyMessage({
+      replyToken,
+      messages: [{ type: 'text', text: 'データベースに接続できません。しばらくしてから再度お試しください。' }],
+    });
+    return;
+  }
+
+  const memberSnap = await db.collection('members').where('lineUserId', '==', lineUserId).limit(1).get();
+
+  if (memberSnap.empty) {
+    const frontendUrl = process.env.FRONTEND_URL ?? process.env.ALLOWED_ORIGIN ?? '';
+    const loginLine = frontendUrl ? `\n${frontendUrl}/login\n` : '\n';
+    await client.replyMessage({
+      replyToken,
+      messages: [{
+        type: 'text',
+        text: `LINEアカウントが未登録のため、シフト確認を利用できません。\n\n【登録手順】\n①シフト管理システムにログイン${loginLine}\n②このチャットに以下の形式で送信\n「名前登録 あなたの名前」\n\n例）名前登録 田中太郎`,
+      }],
+    });
+    return;
+  }
+
+  const memberName = memberSnap.docs[0].data().name;
+  const today = todayJST();
+  const dates = getThisWeek(today);
+  const byDate = await fetchShifts(db, dates);
+  const replyMsg = buildPersonalWeekReply(memberName, dates, byDate);
+
+  await client.replyMessage({ replyToken, messages: [{ type: 'text', text: replyMsg }] });
+}
+
+// ──────────────────────────────────────────────────────────
 // エラー通知・グループ登録ヘルパー
 // ──────────────────────────────────────────────────────────
 
@@ -956,7 +1026,13 @@ async function handleLineEvent(event) {
       return;
     }
 
-    // ④ 日付問い合わせ
+    // ④ シフト確認（個人向け今週確定シフト・DMのみ）
+    if (text === 'シフト確認' && sourceType === 'user') {
+      await handleShiftCheck(lineUserId, replyToken, db);
+      return;
+    }
+
+    // ⑤ 日付問い合わせ
     const dateQuery = parseDateMessage(text);
     if (dateQuery) {
       if (!db) {
