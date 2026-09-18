@@ -700,9 +700,13 @@ function buildPersonalWeekReply(memberName, dates, byDate) {
       (s) => normName(s.memberName) === normName(memberName)
     );
     for (const s of confirmed) {
+      const parts = [formatDateShort(date)];
+      if (s.subject) parts.push(s.subject);
+      if (s.timeType === 'template' && s.template) parts.push(`${s.template}帯`);
       const tl = getShiftTimeLabel(s);
-      const dateLabel = formatDateShort(date);
-      shiftLines.push(tl ? `${dateLabel} ${tl}` : dateLabel);
+      if (tl) parts.push(tl);
+      if (s.place) parts.push(s.place);
+      shiftLines.push(parts.join(' '));
     }
   }
 
