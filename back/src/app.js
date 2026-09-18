@@ -701,8 +701,11 @@ function buildPersonalWeekReply(memberName, dates, byDate) {
     );
     for (const s of confirmed) {
       const parts = [formatDateShort(date)];
-      if (s.subject) parts.push(s.subject);
-      if (s.timeType === 'template' && s.template) parts.push(`${s.template}帯`);
+      // subjectから名前部分を除いて帯ラベルのみ抽出（"A帯 田中太郎" → "A帯"）
+      const subjectLabel = s.subject
+        ? s.subject.split(/[\s　]/).filter((p) => normName(p) !== normName(memberName)).join(' ').trim()
+        : '';
+      if (subjectLabel) parts.push(subjectLabel);
       const tl = getShiftTimeLabel(s);
       if (tl) parts.push(tl);
       if (s.place) parts.push(s.place);
