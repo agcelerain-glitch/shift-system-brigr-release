@@ -19,7 +19,7 @@ export const PLACE_CAPACITY: Record<string, { weekday: number; weekend: number }
 export const PLACE_SHORT: Record<string, string> = {
   'ブリジャール': 'ブ',
   'ルチア': 'ル',
-  'セラス': 'チ',
+  'セラス': 'セ',
 };
 
 // ---- テンプレートA〜Dの表示ラベル ----
