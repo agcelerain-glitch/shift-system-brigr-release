@@ -213,6 +213,8 @@ export interface ApproveParams {
   adminName: string;
   // adjustの場合の上書きフィールド
   adjustFields?: Partial<Pick<Shift, 'timeStart' | 'timeEnd' | 'template' | 'subject' | 'place' | 'headcount' | 'timeType'>>;
+  // adjustの場合にFirestoreから削除するフィールド名（templateなど。merge:trueでは残り続けるため明示削除が必要）
+  fieldsToDelete?: string[];
   expectedVersion?: number;
 }
 
@@ -253,6 +255,12 @@ export async function approveShift(p: ApproveParams): Promise<'ok' | 'conflict'>
       if (p.action === 'adjust' && p.adjustFields) {
         Object.assign(next, p.adjustFields);
         next.status = 'confirmed';
+      }
+      // merge:trueでは既存フィールドが残るため、明示的に削除が必要なフィールドをdeleteFieldで上書き
+      if (p.fieldsToDelete?.length) {
+        for (const field of p.fieldsToDelete) {
+          next[field] = deleteField();
+        }
       }
       tx.set(shiftRef, next, { merge: true });
       // beforeStateのundefinedフィールドを除去（不可シフトはtimeStart等がundefined）

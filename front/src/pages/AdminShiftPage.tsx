@@ -379,30 +379,60 @@ export function AdminShiftPage() {
 
   const openAdjust = (s: Shift) => {
     setAdjusting(s);
-    setAdjTimeStart(s.timeStart ?? '09:00');
-    setAdjTimeEnd(s.timeEnd ?? '17:00');
     setAdjSubject(s.subject);
-    // シフトに場所があればそれを優先、なければlastPlaceを使う
     setAdjPlace(s.place ?? getMemberLastPlace(s.memberName));
-    setAdjAddTime(false);
+
+    // 既に時間情報を持つシフトは最初から時間指定ONで開く
+    const hasTime = s.timeType === 'time' || s.timeType === 'template';
+    setAdjAddTime(hasTime);
+
+    if (s.timeType === 'template' && s.template) {
+      // テンプレートの規定時間を初期値に（LASTはtime inputに使えないためデフォルト値を使用）
+      const tmpl = TEMPLATE_TIMES[s.template];
+      setAdjTimeStart(tmpl.start);
+      setAdjTimeEnd(tmpl.end === 'LAST' ? '02:00' : tmpl.end);
+    } else {
+      setAdjTimeStart(s.timeStart ?? '20:00');
+      setAdjTimeEnd(s.timeEnd ?? '02:00');
+    }
+  };
+
+  // 時間指定トグル: ON時は件名を自動更新、OFF時は元の件名に戻す
+  const toggleAdjAddTime = () => {
+    if (!adjusting) return;
+    const next = !adjAddTime;
+    setAdjAddTime(next);
+    if (next) {
+      setAdjSubject(`時間指定 ${adjusting.memberName}`);
+    } else {
+      setAdjSubject(adjusting.subject);
+    }
   };
 
   const doAdjust = async () => {
     if (!adjusting) return;
+    const subjectTrimmed = adjSubject.trim();
+    if (!subjectTrimmed) { toast.show('件名を入力してください', 'error'); return; }
     try {
       const adjustFields: Parameters<typeof approveShift>[0]['adjustFields'] = {
-        subject: adjSubject.trim(),
+        subject: subjectTrimmed,
         ...(adjPlace.trim() ? { place: adjPlace.trim() } : {}),
         ...(adjAddTime
           ? { timeStart: adjTimeStart, timeEnd: adjTimeEnd, timeType: 'time' as const }
           : {}),
       };
+      // 時間指定に変更した場合、元のtemplateフィールドをFirestoreから完全除去する
+      // （merge:trueでは残り続けるため deleteField() による明示削除が必要）
+      const fieldsToDelete: string[] = [];
+      if (adjAddTime && adjusting.template) fieldsToDelete.push('template');
+
       const res = await approveShift({
         shiftId: adjusting.id,
         action: 'adjust',
         adminName,
         expectedVersion: adjusting.version,
         adjustFields,
+        ...(fieldsToDelete.length ? { fieldsToDelete } : {}),
       });
       if (res === 'ok') {
         if (adjPlace.trim()) saveMemberLastPlace(adjusting.memberName, adjPlace.trim());
@@ -1046,7 +1076,7 @@ export function AdminShiftPage() {
             <div>
               <button
                 type="button"
-                onClick={() => setAdjAddTime(!adjAddTime)}
+                onClick={toggleAdjAddTime}
                 className="flex items-center gap-1 text-xs text-brand-600 hover:text-brand-800 mb-2 font-medium"
               >
                 {adjAddTime
