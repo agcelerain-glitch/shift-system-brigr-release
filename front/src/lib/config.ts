@@ -11,8 +11,8 @@ export type PlaceOption = typeof PLACE_OPTIONS[number];
 // ---- 場所ごとの定員（平日・休日。休日=土日） ----
 export const PLACE_CAPACITY: Record<string, { weekday: number; weekend: number }> = {
   'ブリジャール': { weekday: 5, weekend: 7 },
-  'ルチア': { weekday: 3, weekend: 4 },
-  'セラス': { weekday: 1, weekend: 1 },
+  'ルチア': { weekday: 3, weekend: 5 },
+  'セラス': { weekday: 2, weekend: 2 },
 };
 
 // ---- 超過バッジ用略称 ----
