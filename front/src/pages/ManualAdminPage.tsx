@@ -5,7 +5,7 @@ import { AdminLayout } from '../components/AdminLayout';
 import { Card } from '../components/ui';
 import {
   ClipboardList, Send, CheckCircle2, XCircle, Sliders,
-  RotateCcw, Users, Lock, Megaphone, Trash2, BellPlus,
+  RotateCcw, Users, Lock, Megaphone, Trash2, BellPlus, ShieldCheck,
 } from 'lucide-react';
 
 type IconType = typeof ClipboardList;
@@ -19,11 +19,12 @@ function SectionCard({
   icon: IconType;
   title: string;
   children: ReactNode;
-  accent?: 'slate' | 'rose' | 'purple';
+  accent?: 'slate' | 'rose' | 'purple' | 'teal';
 }) {
   const iconCls =
-    accent === 'rose' ? 'bg-rose-100 text-rose-600' :
+    accent === 'rose'   ? 'bg-rose-100 text-rose-600' :
     accent === 'purple' ? 'bg-purple-100 text-purple-600' :
+    accent === 'teal'   ? 'bg-teal-100 text-teal-600' :
     'bg-slate-100 text-slate-600';
   return (
     <Card className="p-5">
@@ -164,6 +165,25 @@ export function ManualAdminPage() {
         <SectionCard icon={Lock} title="非公開メモ">
           {/* 開発メモ: boardPrivateコレクション。adminのみread/write */}
           <strong>管理者のみ</strong>が閲覧できるメモエリアです。「シフト送信済み」などの業務記録や、ユーザーに見せない連絡メモとして活用できます。<strong>通知</strong>と<strong>メモ</strong>の2種類を投稿できます。
+        </SectionCard>
+
+        <SectionCard icon={ShieldCheck} title="開発者ツール（LINE操作ページ下部）" accent="teal">
+          LINE操作ページの末尾に<strong>開発者専用ツール</strong>があります。
+          <ul className="mt-1.5 space-y-2 list-disc list-inside">
+            <li>
+              <strong>ヘルスチェック</strong>：「チェック実行」を押すと Vercel・Heroku・Firebase・LINE・Discord の5サーバーの疎通状態をリアルタイムで確認できます。
+              障害発生時の原因切り分けに利用してください。
+            </li>
+            <li>
+              <strong>LINE未連携リスト</strong>：LINEと連携していないメンバーを一覧表示します。
+              <span className="inline-block w-2 h-2 rounded-full bg-purple-300 align-middle mx-0.5" />紫がadmin、
+              <span className="inline-block w-2 h-2 rounded-full bg-gray-300 align-middle mx-0.5" />グレーがuserです。
+              未連携のメンバーにはLINEで「<strong>名前登録 お名前</strong>」と送信するよう案内してください。
+            </li>
+          </ul>
+          <div className="mt-2 p-2 rounded-lg bg-teal-50 text-xs text-teal-700">
+            <strong>リマインド通知のON/OFF</strong>は名簿モーダルのメンバー詳細で設定できます。OFFにしたメンバーは毎週金曜日のシフト未提出リマインドが届かなくなります（管理者サマリーには引き続き表示されます）。
+          </div>
         </SectionCard>
 
       </div>
