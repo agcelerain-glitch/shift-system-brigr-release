@@ -108,8 +108,61 @@ app.use(cors({
   },
 }));
 
-// ヘルスチェック
+// ヘルスチェック（簡易）
 app.get('/health', (_req, res) => res.json({ ok: true }));
+
+// ヘルスチェック（詳細: LINE / Discord / Firebase の疎通確認）
+app.get('/health/detail', async (_req, res) => {
+  const results = {
+    heroku: { ok: true },
+    line: { ok: false, error: null },
+    discord: { ok: false, error: null },
+    firebase: { ok: false, error: null },
+  };
+
+  // LINE: getBotInfo で疎通確認
+  try {
+    await client.getBotInfo();
+    results.line.ok = true;
+  } catch (e) {
+    results.line.error = e?.message ?? String(e);
+  }
+
+  // Discord: Webhook URL に GET して存在確認（メッセージは送らない）
+  const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+  if (!webhookUrl) {
+    results.discord.error = 'DISCORD_WEBHOOK_URL未設定';
+  } else {
+    try {
+      const https = require('https');
+      const url = new URL(webhookUrl);
+      await new Promise((resolve, reject) => {
+        const req = https.request(
+          { hostname: url.hostname, path: url.pathname + url.search, method: 'GET', timeout: 5000 },
+          (resp) => { resp.resume(); resp.statusCode < 500 ? resolve(true) : reject(new Error(`HTTP ${resp.statusCode}`)); }
+        );
+        req.on('error', reject);
+        req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
+        req.end();
+      });
+      results.discord.ok = true;
+    } catch (e) {
+      results.discord.error = e?.message ?? String(e);
+    }
+  }
+
+  // Firebase: members コレクションに limit(1) で疎通確認
+  try {
+    const db = getDb();
+    if (!db) throw new Error('Firebase未接続');
+    await db.collection('members').limit(1).get();
+    results.firebase.ok = true;
+  } catch (e) {
+    results.firebase.error = e?.message ?? String(e);
+  }
+
+  res.json(results);
+});
 
 // グループにシフト連絡（GIDはFirestoreから動的取得）
 app.post('/line/group/shift', async (req, res, next) => {
