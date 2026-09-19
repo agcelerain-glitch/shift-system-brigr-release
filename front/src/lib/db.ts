@@ -49,7 +49,7 @@ export function subscribeMembers(cb: (items: Member[]) => void): () => void {
   if (!isFirebaseConfigured) return mockStore.subscribe('members', cb);
   return subscribeReal<Member>(
     query(collection(db!, 'members')),
-    (r) => ({ id: r.id as string, name: r.name as string, createdAt: toMs(r.createdAt), updatedAt: toMs(r.updatedAt), lineUserId: r.lineUserId as string | undefined, role: r.role as Role | undefined }) as Member,
+    (r) => ({ id: r.id as string, name: r.name as string, createdAt: toMs(r.createdAt), updatedAt: toMs(r.updatedAt), lineUserId: r.lineUserId as string | undefined, role: r.role as Role | undefined, excludeFromReminder: r.excludeFromReminder as boolean | undefined }) as Member,
     cb,
   );
 }
@@ -414,6 +414,12 @@ export async function updateMemberLineId(memberId: string, lineUserId: string): 
     lineUserId: lineUserId.trim() || null,
     updatedAt: serverTimestamp(),
   }, { merge: true });
+}
+
+// admin用: リマインド除外フラグの更新
+export async function setExcludeFromReminder(memberId: string, value: boolean): Promise<void> {
+  if (!isFirebaseConfigured || !db) return;
+  await updateDoc(doc(db!, 'members', memberId), { excludeFromReminder: value });
 }
 
 // admin用: メンバー削除

@@ -37,7 +37,8 @@ service cloud.firestore {
           request.resource.data.role == request.auth.token.role);
       allow update: if isUserOrAdmin() &&
         strMax('name', 15) &&
-        !('role' in request.writeFields);
+        !('role' in request.writeFields) &&
+        (isAdmin() || !('excludeFromReminder' in request.writeFields));
       allow delete: if isAdmin();
     }
 

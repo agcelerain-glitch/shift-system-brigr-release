@@ -15,7 +15,7 @@ import { formatDateJP, formatDateTimeJP, isPast7Days, weekdayJP, todayStr, addDa
 import { PLACE_OPTIONS, TEMPLATE_LABELS, TEMPLATE_TIMES, PLACE_CAPACITY, PLACE_SHORT } from '../lib/config';
 import type { Shift, ApprovalLog } from '../lib/types';
 import type { TemplateCode } from '../lib/config';
-import { approveShift, restoreShift, updateMemberLineId, deleteMember, adminDeleteShift, createShiftRequest } from '../lib/db';
+import { approveShift, restoreShift, updateMemberLineId, deleteMember, adminDeleteShift, createShiftRequest, setExcludeFromReminder } from '../lib/db';
 
 type SortKey = 'date' | 'place' | 'time' | 'name' | 'weekday' | 'headcount';
 type FilterStatus = 'plan' | 'confirmed' | 'reviewed' | 'unavailable' | 'delete_request';
@@ -101,6 +101,7 @@ export function AdminShiftPage() {
   const [savingLineId, setSavingLineId] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingMember, setDeletingMember] = useState(false);
+  const [togglingReminder, setTogglingReminder] = useState(false);
   const [summarySelectedDate, setSummarySelectedDate] = useState<string | null>(null);
   // 調整マーク: "YYYY-MM-DD_名前" キーで日付+名前の組み合わせを管理
   const [markedKeys, setMarkedKeys] = useState<Set<string>>(new Set());
@@ -451,6 +452,20 @@ export function AdminShiftPage() {
       toast.show(`削除失敗: ${(e as Error).message}`, 'error');
     } finally {
       setDeletingMember(false);
+    }
+  };
+
+  const handleToggleReminder = async () => {
+    if (!memberInfo || togglingReminder) return;
+    const newValue = !memberInfo.excludeFromReminder;
+    setTogglingReminder(true);
+    try {
+      await setExcludeFromReminder(memberInfo.id, newValue);
+      toast.show(newValue ? `${memberInfo.name}さんのリマインド通知をOFFにしました` : `${memberInfo.name}さんのリマインド通知をONにしました`, 'info');
+    } catch (e) {
+      toast.show(`更新失敗: ${(e as Error).message}`, 'error');
+    } finally {
+      setTogglingReminder(false);
     }
   };
 
@@ -1080,12 +1095,15 @@ export function AdminShiftPage() {
                   onClick={() => { setSelectedMember(m.name); setLineIdDraft(m.lineUserId ?? ''); setShowDeleteConfirm(false); }}
                   className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition group"
                 >
-                  <div className="flex items-center gap-2">
-                    <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-gray-500" />
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-gray-500 shrink-0" />
                     <span className="text-sm font-medium text-gray-800">{m.name}</span>
                     <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${m.lineUserId ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}`}>
                       {m.lineUserId ? 'LINE済' : '未登録'}
                     </span>
+                    {m.excludeFromReminder && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-gray-100 text-gray-500">通知OFF</span>
+                    )}
                   </div>
                   <span className="text-xs text-gray-400">記入 {new Date(m.createdAt).toLocaleDateString()}</span>
                 </button>
@@ -1110,10 +1128,35 @@ export function AdminShiftPage() {
               </div>
             </div>
             <div className="mb-3 p-3 rounded-lg bg-gray-50 text-xs">
-              <p className="text-gray-400 mb-1">LINE ID</p>
-              <p className={`font-mono break-all ${memberInfo?.lineUserId ? 'text-gray-600' : 'text-gray-400 italic'}`}>
+              <p className="text-gray-400 mb-1">LINE</p>
+              <p className={`font-mono break-all mb-3 ${memberInfo?.lineUserId ? 'text-gray-600' : 'text-gray-400 italic'}`}>
                 {memberInfo?.lineUserId ?? '未登録（LINEで「名前登録 お名前」と送信）'}
               </p>
+              {/* リマインド通知トグル */}
+              <div className={`flex items-center justify-between pt-2.5 border-t border-gray-200 ${!memberInfo?.lineUserId ? 'opacity-40' : ''}`}>
+                <div>
+                  <p className="text-gray-600 font-medium">リマインド通知</p>
+                  {!memberInfo?.lineUserId && (
+                    <p className="text-gray-400 text-[10px] mt-0.5">LINE未登録のため無効</p>
+                  )}
+                  {memberInfo?.lineUserId && memberInfo.excludeFromReminder && (
+                    <p className="text-gray-400 text-[10px] mt-0.5">通知しない</p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  disabled={!memberInfo?.lineUserId || togglingReminder}
+                  onClick={handleToggleReminder}
+                  aria-label={memberInfo?.excludeFromReminder ? 'リマインド通知をONにする' : 'リマインド通知をOFFにする'}
+                  className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-200 focus:outline-none ${
+                    !memberInfo?.excludeFromReminder ? 'bg-green-500' : 'bg-gray-300'
+                  } ${!memberInfo?.lineUserId ? 'cursor-not-allowed' : togglingReminder ? 'cursor-wait opacity-70' : 'cursor-pointer'}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${
+                    !memberInfo?.excludeFromReminder ? 'translate-x-6' : 'translate-x-1'
+                  }`} />
+                </button>
+              </div>
             </div>
 
             {!showDeleteConfirm ? (

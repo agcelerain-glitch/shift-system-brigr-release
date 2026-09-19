@@ -20,6 +20,7 @@ export interface Member {
   updatedAt: number; // 最終更新日
   lineUserId?: string;
   role?: Role; // ログイン時のFirebase Authクレームと同期（通知用・情報目的のみ）
+  excludeFromReminder?: boolean; // trueの場合、シフト未提出リマインドのLINE通知を送らない
 }
 
 // shifts: シフト申請・確定
