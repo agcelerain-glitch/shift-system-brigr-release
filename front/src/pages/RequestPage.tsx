@@ -137,6 +137,13 @@ export function RequestPage() {
     if (mode === 'none') {
       const dates = validNoneDates();
       if (dates.length === 0) { toast.show('日付を1つ以上選択してください', 'error'); return; }
+      // 重複・競合チェック（既存シフトまたは不可申請と共存しない）
+      const existingChecks = await Promise.all(dates.map((d) => findShiftByMemberDate(name, d)));
+      const conflicting = dates.filter((_, i) => existingChecks[i] !== null);
+      if (conflicting.length > 0) {
+        toast.show(`既に申請済みの日付があります: ${conflicting.map(formatDateJP).join('、')}`, 'error');
+        return;
+      }
       setSubmitting(true);
       try {
         await Promise.all(
@@ -153,6 +160,12 @@ export function RequestPage() {
 
     if (mode === 'other') {
       if (!otherDate) { toast.show('日付を選択してください', 'error'); return; }
+      // 重複・競合チェック
+      const existing = await findShiftByMemberDate(name, otherDate);
+      if (existing) {
+        toast.show(`${formatDateJP(otherDate)} は既に申請済みです（${existing.subject}）`, 'error');
+        return;
+      }
       setSubmitting(true);
       try {
         await createShift({ memberName: name, date: otherDate, timeType: 'other', subject: `給料受取など ${name}`.trim() });
