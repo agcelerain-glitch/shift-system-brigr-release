@@ -937,12 +937,83 @@ const DEV_HELP_TEXT = `🛠 開発者コマンド
   名前変更 山田花子
 （1時間有効・1回限り）
 
+🏥 サーバー疎通確認
+  ヘルスチェック
+
+📋 LINE未連携メンバー確認
+  連携リスト
+
 📅 シフト確認（共通）
   今日 / 今週 / 7/21 など`;
+
+// 各サービスを並行チェック（タイムアウト3秒）
+async function runHealthCheck(db) {
+  const TIMEOUT = 3000;
+  const race = (label, fn) => Promise.race([
+    fn().then(() => ({ label, ok: true })).catch((e) => ({ label, ok: false, error: e?.message ?? String(e) })),
+    new Promise((resolve) => setTimeout(() => resolve({ label, ok: false, error: 'timeout' }), TIMEOUT)),
+  ]);
+
+  const checks = await Promise.all([
+    race('Heroku',   async () => {}), // 自身が動いていれば常にOK
+    race('Firebase', async () => {
+      if (!db) throw new Error('未接続');
+      await db.collection('members').limit(1).get();
+    }),
+    race('LINE', async () => { await client.getBotInfo(); }),
+    race('Discord',  async () => {
+      const url = process.env.DISCORD_WEBHOOK_URL;
+      if (!url) throw new Error('URL未設定');
+      const { hostname, pathname, search } = new URL(url);
+      await new Promise((resolve, reject) => {
+        const https = require('https');
+        const req = https.request(
+          { hostname, path: pathname + search, method: 'GET', timeout: 2500 },
+          (resp) => { resp.resume(); resp.statusCode < 500 ? resolve() : reject(new Error(`HTTP ${resp.statusCode}`)); }
+        );
+        req.on('error', reject);
+        req.on('timeout', () => { req.destroy(); reject(new Error('timeout')); });
+        req.end();
+      });
+    }),
+  ]);
+
+  const lines = checks.map((c) => `${c.ok ? '✅' : '❌'} ${c.label}${c.ok ? '' : `（${c.error}）`}`);
+  return `🏥 ヘルスチェック結果\n\n${lines.join('\n')}`;
+}
+
+// LINE未連携メンバー一覧（admin優先ソート）
+async function getLineUnlinkedList(db) {
+  if (!db) return '❌ Firebase未接続';
+  const snap = await db.collection('members').get();
+  const unlinked = snap.docs
+    .map((d) => ({ name: d.data().name, lineUserId: d.data().lineUserId, role: d.data().role }))
+    .filter((m) => !m.lineUserId)
+    .sort((a, b) => {
+      const ra = a.role === 'admin' ? 0 : 1;
+      const rb = b.role === 'admin' ? 0 : 1;
+      return ra - rb || (a.name ?? '').localeCompare(b.name ?? '', 'ja');
+    });
+  if (unlinked.length === 0) return '✅ 全員LINE連携済みです';
+  const lines = unlinked.map((m) => `${m.role === 'admin' ? '👑 admin' : '👤 user'}: ${m.name}`);
+  return `📋 LINE未連携（${unlinked.length}名）\n\n${lines.join('\n')}`;
+}
 
 async function handleDevCommand(text, replyToken, db) {
   if (text === 'ヘルプ') {
     await client.replyMessage({ replyToken, messages: [{ type: 'text', text: DEV_HELP_TEXT }] });
+    return true;
+  }
+
+  if (text === 'ヘルスチェック') {
+    const result = await runHealthCheck(db);
+    await client.replyMessage({ replyToken, messages: [{ type: 'text', text: result }] });
+    return true;
+  }
+
+  if (text === '連携リスト') {
+    const result = await getLineUnlinkedList(db);
+    await client.replyMessage({ replyToken, messages: [{ type: 'text', text: result }] });
     return true;
   }
 
