@@ -1,6 +1,6 @@
 // /admin-line LINE操作: グループ送信・自分への連絡・個別チャット・GID管理
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { AdminLayout } from '../components/AdminLayout';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -9,8 +9,7 @@ import { Card, Button, FloatTextarea, Select, Badge, Modal } from '../components
 import {
   Send, Bell, MessageCircle, Megaphone, Users, Info, Trash2, Wifi, WifiOff,
   CalendarDays, X, BellPlus, CheckSquare, Square, ChevronDown, ChevronUp,
-  ChevronLeft, ChevronRight, Activity, CheckCircle2, XCircle, Loader2,
-  ShieldCheck, UserX,
+  ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { callLineApi, subscribeLineConfig, deleteGroupId, sendShiftRequestInvites, deleteShiftRequest } from '../lib/db';
 import { isFirebaseConfigured, API_BASE_URL } from '../lib/firebase';
@@ -95,56 +94,6 @@ export function AdminLinePage() {
   // GID管理
   const [groupId, setGroupId] = useState<string | null | undefined>(undefined);
   const [deletingGid, setDeletingGid] = useState(false);
-  // 開発者ツール: ヘルスチェック
-  type HealthStatus = 'idle' | 'loading' | 'ok' | 'error';
-  type HealthResult = { label: string; status: HealthStatus; error?: string };
-  const [healthMap, setHealthMap] = useState<Record<string, HealthResult>>({});
-  const [healthChecking, setHealthChecking] = useState(false);
-
-  const runHealthCheck = useCallback(async () => {
-    setHealthChecking(true);
-    const init: Record<string, HealthResult> = {
-      vercel:   { label: 'Vercel',   status: 'loading' },
-      heroku:   { label: 'Heroku',   status: 'loading' },
-      firebase: { label: 'Firebase', status: 'loading' },
-      line:     { label: 'LINE',     status: 'loading' },
-      discord:  { label: 'Discord',  status: 'loading' },
-    };
-    setHealthMap(init);
-
-    // Vercel: 自身のオリジンにHEAD
-    const vercelOk = await fetch(window.location.origin, {
-      method: 'HEAD',
-      signal: AbortSignal.timeout(5000),
-    }).then((r) => r.ok).catch(() => false);
-    setHealthMap((prev) => ({ ...prev, vercel: { label: 'Vercel', status: vercelOk ? 'ok' : 'error' } }));
-
-    // Heroku / LINE / Discord / Firebase: バックエンドの詳細ヘルスAPI
-    try {
-      const r = await fetch(`${API_BASE_URL}/health/detail`, {
-        signal: AbortSignal.timeout(12000),
-      });
-      const data = await r.json() as Record<string, { ok: boolean; error?: string }>;
-      setHealthMap((prev) => ({
-        ...prev,
-        heroku:   { label: 'Heroku',   status: data.heroku?.ok   ? 'ok' : 'error', error: data.heroku?.error   ?? undefined },
-        firebase: { label: 'Firebase', status: data.firebase?.ok ? 'ok' : 'error', error: data.firebase?.error ?? undefined },
-        line:     { label: 'LINE',     status: data.line?.ok     ? 'ok' : 'error', error: data.line?.error     ?? undefined },
-        discord:  { label: 'Discord',  status: data.discord?.ok  ? 'ok' : 'error', error: data.discord?.error  ?? undefined },
-      }));
-    } catch {
-      const errEntry = (label: string): HealthResult => ({ label, status: 'error', error: 'バックエンドに接続できません' });
-      setHealthMap((prev) => ({
-        ...prev,
-        heroku:   errEntry('Heroku'),
-        firebase: errEntry('Firebase'),
-        line:     errEntry('LINE'),
-        discord:  errEntry('Discord'),
-      }));
-    }
-    setHealthChecking(false);
-  }, []);
-
   // カレンダー
   const [calSelected, setCalSelected] = useState<string | null>(null);
   type CalFilter = 'plan' | 'confirmed' | 'reviewed' | 'unavailable';
@@ -356,18 +305,6 @@ export function AdminLinePage() {
       setDeletingGid(false);
     }
   };
-
-  // 開発者ツール: LINE未連携メンバー（admin優先でソート）
-  const lineUnlinked = useMemo(() =>
-    members
-      .filter((m) => !m.lineUserId)
-      .sort((a, b) => {
-        const ra = a.role === 'admin' ? 0 : 1;
-        const rb = b.role === 'admin' ? 0 : 1;
-        return ra - rb || a.name.localeCompare(b.name, 'ja');
-      }),
-    [members]
-  );
 
   const calShifts = useMemo(() => shifts.filter((s) => {
     const isUnavail = s.timeType === 'none';
@@ -1136,98 +1073,6 @@ export function AdminLinePage() {
           )}
         </Card>
       )}
-
-      {/* 開発者ツール */}
-      <Card className="p-4">
-        <div className="flex items-center gap-2 mb-4">
-          <ShieldCheck className="w-4 h-4 text-slate-500" />
-          <h2 className="text-sm font-semibold text-gray-700">開発者ツール</h2>
-        </div>
-
-        {/* ヘルスチェック */}
-        <div className="mb-5">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
-              <Activity className="w-3.5 h-3.5" />ヘルスチェック
-            </p>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={runHealthCheck}
-              disabled={healthChecking}
-              className="text-xs"
-            >
-              {healthChecking
-                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />確認中…</>
-                : <><Activity className="w-3.5 h-3.5" />チェック実行</>
-              }
-            </Button>
-          </div>
-
-          {Object.keys(healthMap).length === 0 ? (
-            <p className="text-xs text-gray-400 text-center py-3">「チェック実行」でサーバー状態を確認</p>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {(['vercel', 'heroku', 'firebase', 'line', 'discord'] as const).map((key) => {
-                const h = healthMap[key];
-                if (!h) return null;
-                return (
-                  <div
-                    key={key}
-                    className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs ${
-                      h.status === 'ok'      ? 'bg-green-50 text-green-700' :
-                      h.status === 'error'   ? 'bg-red-50 text-red-700' :
-                                              'bg-gray-50 text-gray-500'
-                    }`}
-                  >
-                    {h.status === 'ok'      && <CheckCircle2 className="w-4 h-4 shrink-0" />}
-                    {h.status === 'error'   && <XCircle      className="w-4 h-4 shrink-0" />}
-                    {h.status === 'loading' && <Loader2      className="w-4 h-4 shrink-0 animate-spin" />}
-                    <span className="font-medium">{h.label}</span>
-                    {h.status === 'ok'    && <span className="ml-auto text-green-600 font-semibold">OK</span>}
-                    {h.status === 'error' && <span className="ml-auto truncate max-w-[120px] text-red-500">{h.error ?? 'エラー'}</span>}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* LINE未連携メンバーリスト */}
-        <div>
-          <p className="text-xs font-medium text-gray-600 flex items-center gap-1.5 mb-2">
-            <UserX className="w-3.5 h-3.5" />LINE未連携
-            <span className="ml-1 px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 font-semibold">
-              {lineUnlinked.length}名
-            </span>
-          </p>
-          {lineUnlinked.length === 0 ? (
-            <p className="text-xs text-green-600 flex items-center gap-1 py-2">
-              <CheckCircle2 className="w-3.5 h-3.5" />全員連携済み
-            </p>
-          ) : (
-            <div className="flex flex-wrap gap-1.5">
-              {lineUnlinked.map((m) => (
-                <span
-                  key={m.id}
-                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
-                    m.role === 'admin'
-                      ? 'bg-purple-100 text-purple-700'
-                      : 'bg-gray-100 text-gray-600'
-                  }`}
-                >
-                  {m.role === 'admin' && <ShieldCheck className="w-3 h-3" />}
-                  {m.name}
-                </span>
-              ))}
-            </div>
-          )}
-          <p className="text-[10px] text-gray-400 mt-2">
-            <span className="inline-block w-2 h-2 rounded-full bg-purple-200 mr-1" />admin
-            <span className="inline-block w-2 h-2 rounded-full bg-gray-200 mr-1" />user
-          </p>
-        </div>
-      </Card>
 
       {/* 全体シフトカレンダー */}
       <div className="mt-6">
