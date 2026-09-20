@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
 const https = require('https');
+const rateLimit = require('express-rate-limit');
 const { messagingApi, validateSignature } = require('@line/bot-sdk');
 const admin = require('firebase-admin');
 
@@ -73,6 +74,55 @@ function getDb() {
   return admin.firestore();
 }
 
+// ──────────────────────────────────────────────────────────
+// 認証ミドルウェア群
+// ──────────────────────────────────────────────────────────
+
+// Firebase IDトークン検証（checkRevoked: false で追加Firestore通信なし → 低遅延）
+async function verifyFirebaseToken(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ ok: false, message: '認証が必要です' });
+  }
+  if (!admin.apps.length) {
+    return res.status(503).json({ ok: false, message: 'Firebase未接続のため認証不可' });
+  }
+  const token = authHeader.slice(7);
+  try {
+    req.firebaseUser = await admin.auth().verifyIdToken(token);
+    next();
+  } catch {
+    return res.status(401).json({ ok: false, message: '認証トークンが無効または期限切れです' });
+  }
+}
+
+// admin ロール必須
+function requireAdmin(req, res, next) {
+  if (req.firebaseUser?.role !== 'admin') {
+    return res.status(403).json({ ok: false, message: 'admin権限が必要です' });
+  }
+  next();
+}
+
+// user or admin（スタッフが回答する系エンドポイント用）
+function requireAuth(req, res, next) {
+  const role = req.firebaseUser?.role;
+  if (role !== 'admin' && role !== 'user') {
+    return res.status(403).json({ ok: false, message: '権限がありません' });
+  }
+  next();
+}
+
+// /error/report 専用レートリミット（認証不要のため乱用防止）
+// 10分間に10件まで（クラッシュ連打でもLINE/Discordへのスパムを防ぐ）
+const errorReportLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { ok: false, message: 'リクエストが多すぎます。しばらくしてからお試しください。' },
+});
+
 // LINE Webhook署名検証ミドルウェア（webhookエンドポイント専用）
 function verifyLineSignature(req, res, next) {
   const signature = req.headers['x-line-signature'];
@@ -111,8 +161,8 @@ app.use(cors({
 // ヘルスチェック（簡易）
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
-// ヘルスチェック（詳細: LINE / Discord / Firebase の疎通確認）
-app.get('/health/detail', async (_req, res) => {
+// ヘルスチェック（詳細: LINE / Discord / Firebase の疎通確認）admin限定
+app.get('/health/detail', verifyFirebaseToken, requireAdmin, async (_req, res) => {
   const results = {
     heroku: { ok: true },
     line: { ok: false, error: null },
@@ -165,7 +215,7 @@ app.get('/health/detail', async (_req, res) => {
 });
 
 // グループにシフト連絡（GIDはFirestoreから動的取得）
-app.post('/line/group/shift', async (req, res, next) => {
+app.post('/line/group/shift', verifyFirebaseToken, requireAdmin, async (req, res, next) => {
   try {
     const { message } = req.body;
     if (!message) return res.status(400).json({ ok: false, message: 'message required' });
@@ -177,7 +227,7 @@ app.post('/line/group/shift', async (req, res, next) => {
 });
 
 // グループに当日ポジション配置連絡（GIDはFirestoreから動的取得）
-app.post('/line/group/position', async (req, res, next) => {
+app.post('/line/group/position', verifyFirebaseToken, requireAdmin, async (req, res, next) => {
   try {
     const { message } = req.body;
     if (!message) return res.status(400).json({ ok: false, message: 'message required' });
@@ -189,7 +239,7 @@ app.post('/line/group/position', async (req, res, next) => {
 });
 
 // 自分への連絡
-app.post('/line/self', async (req, res, next) => {
+app.post('/line/self', verifyFirebaseToken, requireAdmin, async (req, res, next) => {
   try {
     const { message } = req.body;
     if (!message) return res.status(400).json({ error: 'message required' });
@@ -199,7 +249,7 @@ app.post('/line/self', async (req, res, next) => {
 });
 
 // 管理者全員に通知（role=adminのmembersのlineUserId + LINE_SELF_USER_ID）
-app.post('/line/notify-admins', async (req, res, next) => {
+app.post('/line/notify-admins', verifyFirebaseToken, requireAdmin, async (req, res, next) => {
   try {
     const { message } = req.body;
     if (!message) return res.status(400).json({ ok: false, message: 'message required' });
@@ -225,7 +275,7 @@ app.post('/line/notify-admins', async (req, res, next) => {
 });
 
 // 出勤依頼の個別送信（shiftRequestInvitesをFirestoreに作成 + LINE通知）
-app.post('/shift-request/send-invites', async (req, res, next) => {
+app.post('/shift-request/send-invites', verifyFirebaseToken, requireAdmin, async (req, res, next) => {
   try {
     const { requestId, date, place, timeLabel, targetMembers, comment, sendToGroup, groupMessage } = req.body;
     if (!requestId || !targetMembers || !Array.isArray(targetMembers)) {
@@ -281,7 +331,7 @@ app.post('/shift-request/send-invites', async (req, res, next) => {
 });
 
 // 出勤依頼への回答処理（confirmedシフト作成 + 管理者全員LINE通知）
-app.post('/shift-request/respond', async (req, res, next) => {
+app.post('/shift-request/respond', verifyFirebaseToken, requireAuth, async (req, res, next) => {
   try {
     const { inviteId, requestId, memberName, response, adjustedTimeStart, adjustedTimeEnd, userComment } = req.body;
     if (!inviteId || !requestId || !memberName || !response) {
@@ -412,7 +462,7 @@ app.post('/shift-request/respond', async (req, res, next) => {
 });
 
 // 個別チャット連絡
-app.post('/line/dm', async (req, res, next) => {
+app.post('/line/dm', verifyFirebaseToken, requireAdmin, async (req, res, next) => {
   try {
     const { lineUserId, message } = req.body;
     if (!lineUserId || !message) return res.status(400).json({ error: 'lineUserId and message required' });
@@ -422,8 +472,8 @@ app.post('/line/dm', async (req, res, next) => {
 });
 
 // フロントエンドエラー受信 → Discord + LINE へ転送
-// PC・スマホ問わずフロント側で検知したエラーをここで受け取る
-app.post('/error/report', async (req, res) => {
+// PC・スマホ問わずフロント側で検知したエラーをここで受け取る（認証不要のためrateLimit保護）
+app.post('/error/report', errorReportLimiter, async (req, res) => {
   try {
     const { source, context, error: errMsg, userAgent } = req.body ?? {};
     if (!errMsg) return res.status(400).json({ ok: false, message: 'error required' });
@@ -1053,7 +1103,7 @@ async function handleLineEvent(event) {
       replyToken: event.replyToken,
       messages: [{
         type: 'text',
-        text: '本チャットに、以下の形式でメッセージを送ってください。\n\n【名前登録 あなたの名前】\n\n例）名前登録 田中太郎\n\n※名前はシフト管理システムに登録されているものと完全一致が必要です。\n※1通として送信してください。（余分な言葉はエラーになります）\n\n\n━━━━━━━━━━━━\n📅 シフト確認の使い方\n登録後は日付を送信するとその日の確定シフトを返信します。\n\n例: 今日 / 今月\n━━━━━━━━━━━━',
+        text: '本チャットに、以下の形式でメッセージを送ってください。\n\n【名前登録 あなたの名前】\n\n例）名前登録 田中太郎\n\n※名前はシフト管理システムに登録されているものと完全一致が必要です。\n※1通として送信してください。（余分な言葉はエラーになります）\n\n\n━━━━━━━━━━━━\n📅 シフト確認の使い方\n名前登録後、以下のメッセージを送信できます。\n\n「シフト確認」\n→ 今週の自分の確定シフトを確認\n\n「今日 / 今週 / 7/21」など\n→ その日・期間の全員シフトを確認\n━━━━━━━━━━━━',
       }],
     });
     return;
@@ -1120,13 +1170,9 @@ async function handleLineEvent(event) {
 
         if (nameSnap.empty) {
           console.log(`[webhook] 名前不一致: "${memberName}" は membersコレクションに存在しない`);
-          const frontendUrl = process.env.FRONTEND_URL ?? 'https://shift-control-app-shifter.vercel.app';
-          let nameList = '（取得失敗）';
-          try {
-            const membersSnap = await db.collection('members').orderBy('name').get();
-            nameList = membersSnap.empty ? '（まだ登録者なし）' : membersSnap.docs.map((d) => `・${d.data().name}`).join('\n');
-          } catch (_) {}
-          replyText = `「${memberName}」はメンバー一覧に見つかりません。\n\nまずシフト管理システムにログインして名前を登録してください：\n${frontendUrl}/login\n\n現在の登録名簿:\n${nameList}\n\n上記の名前と完全一致させて再度お試しください。`;
+          const frontendUrl = process.env.FRONTEND_URL ?? process.env.ALLOWED_ORIGIN ?? '';
+          const loginLine = frontendUrl ? `\n${frontendUrl}/login\n` : '\n';
+          replyText = `「${memberName}」はメンバー一覧に見つかりません。\n\nまずシフト管理システムにログインして名前を登録してください：${loginLine}\nシステムに登録されている名前と完全一致させて再度お試しください。`;
 
         } else if (!lineIdSnap.empty && lineIdSnap.docs[0].id !== nameSnap.docs[0].id) {
           const existingName = lineIdSnap.docs[0].data().name;

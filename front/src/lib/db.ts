@@ -19,11 +19,23 @@ import {
   deleteField,
   type Timestamp,
 } from 'firebase/firestore';
-import { db, isFirebaseConfigured, API_BASE_URL } from './firebase';
+import { getIdToken } from 'firebase/auth';
+import { db, auth, isFirebaseConfigured, API_BASE_URL } from './firebase';
 import { mockStore } from './mockStore';
 import type { Shift, Member, BoardPublic, BoardPrivate, ApprovalLog, DeletedBoardPublic, DeletedBoardPrivate, ShiftStatus, TimeType, TemplateCode, Role, ShiftRequest, ShiftRequestInvite, ShiftRequestStatus, InviteResponse, CalendarEvent } from './types';
 
 const now = () => Date.now();
+
+// ログイン中ユーザーのFirebase IDトークンを取得（キャッシュ利用・期限切れ時は自動更新）
+async function getAuthToken(): Promise<string | null> {
+  if (!auth?.currentUser) return null;
+  try {
+    return await getIdToken(auth.currentUser);
+  } catch {
+    return null;
+  }
+}
+
 const toMs = (t: unknown): number => {
   if (typeof t === 'number') return t;
   if (t && typeof t === 'object' && 'seconds' in t) return (t as Timestamp).seconds * 1000;
@@ -469,11 +481,17 @@ export async function callLineApi(path: string, body: Record<string, unknown>): 
     await new Promise((r) => setTimeout(r, 400));
     return { ok: true, message: `[モック] ${path} へ送信しました` };
   }
-  const doFetch = () => fetch(`${API_BASE_URL}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  const doFetch = async () => {
+    const token = await getAuthToken();
+    return fetch(`${API_BASE_URL}${path}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+  };
   try {
     const res = await doFetch();
     if (!res.ok) return { ok: false, message: `HTTP ${res.status}` };
@@ -590,9 +608,13 @@ export async function sendShiftRequestInvites(params: {
     return { ok: true, message: '[モック] 出勤依頼を送信しました' };
   }
   try {
+    const token = await getAuthToken();
     const res = await fetch(`${API_BASE_URL}/shift-request/send-invites`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify(params),
     });
     const json = await res.json();
@@ -617,9 +639,13 @@ export async function respondToShiftRequestInvite(params: {
     return { ok: true, result: params.response === 'rejected' ? 'rejected' : 'accepted', message: '[モック] 回答しました' };
   }
   try {
+    const token = await getAuthToken();
     const res = await fetch(`${API_BASE_URL}/shift-request/respond`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify(params),
     });
     const json = await res.json();
