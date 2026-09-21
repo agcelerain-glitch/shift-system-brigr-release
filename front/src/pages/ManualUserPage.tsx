@@ -81,6 +81,9 @@ export function ManualUserPage() {
             <li>「<strong>1日分</strong>」：日付＋件名＋時間＋場所をコピー</li>
             <li>予定のシフトは一覧の<strong>取消ボタン</strong>（ゴミ箱）から取り下げ可能</li>
           </ul>
+          <span className="block mt-1 text-xs text-gray-400">
+            ※直近のシフト（対象週の土曜日以降）は取り消しできません。変更が必要な場合は管理者にご連絡ください。
+          </span>
         </SectionCard>
 
         <SectionCard icon={FilePlus} title="シフト申請">
