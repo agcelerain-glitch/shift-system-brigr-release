@@ -977,7 +977,7 @@ export function AdminShiftPage() {
                     ) : s.timeType === 'none' ? (
                       // 不可申請: 確認のみ（承認・調整は不要）
                       s.status === 'plan' && (
-                        <Button size="sm" variant="secondary" onClick={() => doDeny(s)}><CheckCircle2 className="w-4 h-4" />確認済に</Button>
+                        <Button size="sm" variant="secondary" onClick={() => doDeny(s)}><CheckCircle2 className="w-4 h-4" />確認済へ</Button>
                       )
                     ) : (
                       <>
