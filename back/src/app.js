@@ -1143,15 +1143,22 @@ async function handleLineEvent(event) {
     }
 
     // ③ 名前登録（「名前登録 名前」形式）
-    const newMatch = text.match(/^名前登録[\s　]+(.+)$/);
-    const oldMatch = !newMatch && text.match(/^登録\s*[:：]\s*(.+)$/);
+    // 不可視Unicode文字（ゼロ幅スペース等）を除去してからマッチ
+    const cleanText = text.replace(/[\u200B\uFEFF\u200C\u200D\u00AD]/g, '');
+    const newMatch = cleanText.match(/^名前登録[\s　]+(.+)$/);
+    const oldMatch = !newMatch && cleanText.match(/^登録\s*[:：]\s*(.+)$/);
     const nameMatch = newMatch || oldMatch;
 
     if (nameMatch) {
       console.log(`[webhook] 名前登録試行: userId=${lineUserId} text="${text}"`);
-      const raw = nameMatch[1].trim();
+      // 不可視文字除去・全角スペース/ノーブレークスペース→半角に統一・連続スペース単一化・前後trim
+      const raw = nameMatch[1]
+        .replace(/[\u200B\uFEFF\u200C\u200D\u00AD]/g, '')
+        .replace(/[\u3000\u00A0]/g, ' ')
+        .replace(/ {2,}/g, ' ')
+        .trim();
 
-      if (raw.includes(' ') || raw.includes('　') || raw.length > 15) {
+      if (raw.length === 0 || raw.length > 20) {
         await client.replyMessage({
           replyToken,
           messages: [{ type: 'text', text: '名前の形式が正しくありません。\n\n名前のみを入力してください。\n例）名前登録 田中太郎' }],
