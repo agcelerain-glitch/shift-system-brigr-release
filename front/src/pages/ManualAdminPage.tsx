@@ -6,6 +6,7 @@ import { Card } from '../components/ui';
 import {
   ClipboardList, Send, CheckCircle2, XCircle, Sliders,
   RotateCcw, Users, Lock, Megaphone, Trash2, BellPlus,
+  AlertTriangle, CalendarDays,
 } from 'lucide-react';
 
 type IconType = typeof ClipboardList;
@@ -19,10 +20,11 @@ function SectionCard({
   icon: IconType;
   title: string;
   children: ReactNode;
-  accent?: 'slate' | 'rose' | 'purple';
+  accent?: 'slate' | 'rose' | 'purple' | 'red';
 }) {
   const iconCls =
     accent === 'rose' ? 'bg-rose-100 text-rose-600' :
+    accent === 'red' ? 'bg-red-100 text-red-600' :
     accent === 'purple' ? 'bg-purple-100 text-purple-600' :
     'bg-slate-100 text-slate-600';
   return (
@@ -112,6 +114,18 @@ export function ManualAdminPage() {
           </ul>
         </SectionCard>
 
+        <SectionCard icon={AlertTriangle} title="人数オーバー警告（定員）" accent="red">
+          確定シフトが<strong>定員を超える</strong>と、該当の場所が<strong className="text-red-600">赤色</strong>で警告表示されます。
+          <ul className="mt-1.5 space-y-1 list-disc list-inside">
+            <li><strong>18日間サマリー</strong>・LINE<strong>シフト連絡</strong>プレビュー・<strong>ポジション配置</strong>で自動チェック</li>
+            <li>定員は<strong>場所ごと</strong>に設定。<u>平日と休日で定員が異なります</u></li>
+            <li><u>休日＝金・土・日</u>（<strong>金曜は週末</strong>のため休日と同じ定員で判定）</li>
+          </ul>
+          <span className="block mt-1 text-xs text-gray-400">
+            ※定員の数値を変更したい場合は開発者にご相談ください。
+          </span>
+        </SectionCard>
+
         <SectionCard icon={BellPlus} title="出勤依頼" accent="purple">
           人手が必要な日に、特定のメンバーへ<strong>出勤依頼</strong>を送る機能です。2ステップで使います。
           <ol className="mt-1.5 space-y-1 list-decimal list-inside">
@@ -145,7 +159,7 @@ export function ManualAdminPage() {
           5種類のLINE送信ができます：
           <ul className="mt-1.5 space-y-1 list-disc list-inside">
             <li><strong>グループ送信①</strong>：自由文のお知らせをグループへ送信</li>
-            <li><strong>グループ送信②</strong>：シフト連絡を送信。週（前週・今週・来週）を選ぶと確定シフトが日付・場所・時間帯・名前の形式で自動整形されます。名簿外の人も手動で追加可能</li>
+            <li><strong>グループ送信②</strong>：シフト連絡を送信。週（前週・今週・来週）を選ぶと確定シフトが日付・場所・時間帯・名前の形式で自動整形されます。<u>定員超過の場所は赤く表示</u>。名簿外の人も手動で追加可能</li>
             <li><strong>グループ送信③</strong>：当日のポジション配置連絡。場所を選択し、担当者を配置行ごとに設定して送信。確定シフトのメンバーを選択肢から選べます</li>
             <li><strong>自分への連絡</strong>：管理者自身へのリマインダー送信</li>
             <li><strong>個別チャット</strong>：メンバーを選んで個別送信</li>
@@ -155,15 +169,26 @@ export function ManualAdminPage() {
 
         <SectionCard icon={Megaphone} title="全体掲示板">
           {/* 開発メモ: boardPublicコレクション。userは読取のみ、adminは書込/削除可 */}
-          全ユーザー向けのお知らせを<strong>投稿・削除</strong>できます。投稿はユーザーの掲示板ページにリアルタイムで反映されます。「本日は給料日です」「シフト変更のお知らせ」などに活用してください。
+          掲示板管理ページは<strong>全体掲示板・非公開メモ・行事等・削除済</strong>の<u>4タブ</u>構成です。
+          <strong>全体掲示板</strong>では全ユーザー向けのお知らせを<strong>投稿・削除</strong>できます。投稿はユーザーの掲示板ページにリアルタイムで反映されます。「本日は給料日です」「シフト変更のお知らせ」などに活用してください。
           <span className="block mt-1 text-xs text-gray-400">
-            ※削除した投稿は「削除済み」タブから<strong>復元</strong>または<strong>完全削除</strong>できます。
+            ※削除した投稿は「<strong>削除済</strong>」タブから<strong>復元</strong>または<strong>完全削除</strong>できます。
           </span>
         </SectionCard>
 
         <SectionCard icon={Lock} title="非公開メモ">
           {/* 開発メモ: boardPrivateコレクション。adminのみread/write */}
           <strong>管理者のみ</strong>が閲覧できるメモエリアです。「シフト送信済み」などの業務記録や、ユーザーに見せない連絡メモとして活用できます。<strong>通知</strong>と<strong>メモ</strong>の2種類を投稿できます。
+        </SectionCard>
+
+        <SectionCard icon={CalendarDays} title="行事等（定休日・臨時休業）" accent="red">
+          {/* 開発メモ: calendarEventsコレクション。全員のカレンダー上部に表示 */}
+          掲示板管理ページの「<strong>行事等</strong>」タブで<strong>定休日・臨時休業</strong>などを登録できます。
+          <ul className="mt-1.5 space-y-1 list-disc list-inside">
+            <li><strong>日付・件名</strong>（例: 定休日）・<strong>備考</strong>（任意）で追加</li>
+            <li>登録した行事は<u>全員のカレンダー上部</u>に表示されます</li>
+            <li>名前の紐付けは<strong>不要</strong>。不要になったら削除できます</li>
+          </ul>
         </SectionCard>
 
 
