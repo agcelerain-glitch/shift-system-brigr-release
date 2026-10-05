@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { callLineApi, subscribeLineConfig, deleteGroupId, sendShiftRequestInvites, deleteShiftRequest } from '../lib/db';
 import { isFirebaseConfigured, API_BASE_URL } from '../lib/firebase';
-import { formatDateJP, todayStr, displayTime } from '../lib/utils';
+import { formatDateJP, todayStr, displayTime, isWeekendCapacity } from '../lib/utils';
 import { MonthCalendar, DayShiftList } from '../components/MonthCalendar';
 import { PLACE_OPTIONS, TEMPLATE_LABELS, PLACE_CAPACITY, PLACE_SHORT } from '../lib/config';
 import type { Shift } from '../lib/types';
@@ -193,7 +193,7 @@ export function AdminLinePage() {
 
       // 場所別の合計人数を集計し定員超過チェック
       const d = new Date(date + 'T00:00:00');
-      const isWkend = d.getDay() === 0 || d.getDay() === 6;
+      const isWkend = isWeekendCapacity(d);
       const overCapacityPlaces = Object.entries(PLACE_CAPACITY)
         .filter(([place, cap]) => {
           const tm = placeMap.get(place);

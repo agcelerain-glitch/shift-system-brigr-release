@@ -11,7 +11,7 @@ import {
   CalendarDays, Calendar, Hash, ChevronDown, ChevronRight, History, Trash2, Plus, Minus,
   AlertTriangle, BellPlus, X,
 } from 'lucide-react';
-import { formatDateJP, formatDateTimeJP, isPast7Days, weekdayJP, todayStr, addDays, displayTime } from '../lib/utils';
+import { formatDateJP, formatDateTimeJP, isPast7Days, weekdayJP, todayStr, addDays, displayTime, isWeekendCapacity } from '../lib/utils';
 import { PLACE_OPTIONS, TEMPLATE_LABELS, TEMPLATE_TIMES, PLACE_CAPACITY, PLACE_SHORT } from '../lib/config';
 import type { Shift, ApprovalLog } from '../lib/types';
 import type { TemplateCode } from '../lib/config';
@@ -268,7 +268,7 @@ export function AdminShiftPage() {
     return Array.from({ length: 18 }, (_, i) => {
       const date = addDays(today, i);
       const d = new Date(date + 'T00:00:00');
-      const isWkend = d.getDay() === 0 || d.getDay() === 6;
+      const isWkend = isWeekendCapacity(d);
       const dayShifts = shifts.filter((s) => s.date === date);
       // 場所別確定人数を集計し定員超過チェック
       const placeCounts: Record<string, number> = {};
@@ -689,7 +689,7 @@ export function AdminShiftPage() {
             <div className="space-y-2">
               {pivotData.map((group) => {
                 const selectedD = summarySelectedDate ? new Date(summarySelectedDate + 'T00:00:00') : null;
-                const isWkend = selectedD ? (selectedD.getDay() === 0 || selectedD.getDay() === 6) : false;
+                const isWkend = selectedD ? isWeekendCapacity(selectedD) : false;
                 const cap = PLACE_CAPACITY[group.place];
                 const isOver = cap ? group.total > (isWkend ? cap.weekend : cap.weekday) : false;
                 return (

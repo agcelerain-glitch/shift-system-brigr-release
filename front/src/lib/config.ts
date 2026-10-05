@@ -8,7 +8,7 @@ export type TemplateCode = 'A' | 'B' | 'C' | 'D';
 export const PLACE_OPTIONS = ['ブリジャール', 'ルチア', 'セラス', 'ルミ・ベガ'] as const;
 export type PlaceOption = typeof PLACE_OPTIONS[number];
 
-// ---- 場所ごとの定員（平日・休日。休日=土日） ----
+// ---- 場所ごとの定員（平日・休日。休日=金土日。金曜は週末のため休日同様に扱う） ----
 export const PLACE_CAPACITY: Record<string, { weekday: number; weekend: number }> = {
   'ブリジャール': { weekday: 5, weekend: 7 },
   'ルチア': { weekday: 3, weekend: 5 },

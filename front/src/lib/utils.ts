@@ -63,6 +63,12 @@ export const weekdayJP = (date: string): string => {
   return ['日', '月', '火', '水', '木', '金', '土'][d.getDay()];
 };
 
+// 定員判定用の「休日」判定（金・土・日）。金曜は週末のため休日同様に扱う
+export const isWeekendCapacity = (d: Date): boolean => {
+  const w = d.getDay();
+  return w === 0 || w === 5 || w === 6; // 日・金・土
+};
+
 export const weekdayColor = (date: string): string => {
   const d = new Date(date + 'T00:00:00');
   const w = d.getDay();
