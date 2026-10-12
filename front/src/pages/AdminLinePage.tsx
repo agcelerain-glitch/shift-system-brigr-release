@@ -52,6 +52,18 @@ function timeLabelOfShift(s: Shift): string {
   return '';
 }
 
+// 帯の並び順: A帯→B帯→C帯→D帯→時間指定→その他→追加→時間未設定
+// 固定ラベル以外（時刻レンジ）は「時間指定」としてD帯の直後に並べる
+const TIME_LABEL_ORDER = [TEMPLATE_LABELS.A, TEMPLATE_LABELS.B, TEMPLATE_LABELS.C, TEMPLATE_LABELS.D];
+function timeGroupRank(label: string): number {
+  const i = TIME_LABEL_ORDER.indexOf(label);
+  if (i >= 0) return i;            // A帯..D帯 → 0..3
+  if (label === 'その他') return 5;
+  if (label === '追加') return 6;
+  if (label === '時間未設定') return 7;
+  return 4;                        // 時間指定（時刻レンジ）→ D帯の次
+}
+
 // 日付文字列を「M/D（曜）」形式に
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
 function formatShortDate(dateStr: string): string {
@@ -207,7 +219,12 @@ export function AdminLinePage() {
         date,
         placeGroups: Array.from(placeMap.entries()).map(([place, tm]) => ({
           place,
-          timeGroups: Array.from(tm.entries()).map(([label, mbs]) => ({ label, members: mbs })),
+          timeGroups: Array.from(tm.entries())
+            .map(([label, mbs]) => ({ label, members: mbs }))
+            .sort((a, b) =>
+              timeGroupRank(a.label) - timeGroupRank(b.label) ||
+              a.label.localeCompare(b.label, 'ja')
+            ),
         })),
         overCapacityPlaces,
       };
