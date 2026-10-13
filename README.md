@@ -217,3 +217,20 @@ shifter_template/
 | 🟡 推奨 | `front/public/` | ファビコン・アイコン画像 |
 | 🟢 任意 | `front/src/components/UserLayout.tsx` | ナビのアプリ名・アイコン |
 | 🟢 任意 | `front/src/components/AdminLayout.tsx` | 管理者画面のタイトル |
+
+---
+
+## 運用上の留意点（Heroku バックエンド）
+
+バックエンドは **Basic dyno で常時稼働**している。Eco dyno と違いスリープしないため、通常運用では起動遅延（cold start）による LINE Webhook の取りこぼしは発生しない。その上で、以下は Heroku / LINE の仕様として理解しておくこと。
+
+- **約24時間ごとの自動再起動（dyno cycling）**
+  Basic / Standard でも Heroku は約1日1回 dyno を自動再起動する。この数秒間はダウンし、ちょうどその間に届いた LINE Webhook は取りこぼす可能性がある（**LINE Messaging API は Webhook を原則再送しない**ため）。発生確率は低く、数十名規模では実用上問題にならない。完全に無くすには複数 dyno による冗長化が必要。
+
+- **Heroku Scheduler の実行分は別課金**
+  Scheduler アドオン自体は無料だが、ジョブ実行のたびに one-off dyno 時間を消費するため、web dyno の月額（Basic ≒ $7/月）とは**別に少額が加算**される。請求は「web dyno 分 ＋ α」になる。
+
+- **アプリ内に再試行ロジックは無い**
+  起動時の初期化（`admin.initializeApp`）と `app.listen` は各1回のみ。Firebase Admin の実接続は初回クエリ時に遅延確立される。プロセスがクラッシュした場合（`uncaughtException` / `unhandledRejection` で `process.exit(1)`）は Heroku 側が自動的に dyno を再起動する。
+
+> `web` dyno を停止（Resources 画面のトグル OFF ＝ scale 0）にすると、課金設定はそのままでもアプリが起動せず LINE 連携が全て停止する。稼働中は停止前の状態に戻すこと。稼働確認は `https://<heroku-app>/` へアクセスし **HTTP 404 が返れば起動中**（503 "No web processes running" なら停止中）。
