@@ -569,6 +569,21 @@ function getShiftTimeLabel(shift) {
   return '';
 }
 
+// 帯の並び順: A帯→B帯→C帯→D帯→時間指定→その他→その他未設定（フロントのピボットと同一順）
+const TEMPLATE_BAND_ORDER = { A: 0, B: 1, C: 2, D: 3 };
+function shiftBandRank(shift) {
+  if (shift.timeType === 'template' && shift.template != null) {
+    return TEMPLATE_BAND_ORDER[shift.template] ?? 4;
+  }
+  if (shift.timeType === 'time') return 4;   // 時間指定
+  if (shift.timeType === 'other') return 5;  // その他
+  return 6;
+}
+// 確定シフト配列を帯順に並べたコピーを返す（元配列は壊さない）
+function sortByBand(shifts) {
+  return [...shifts].sort((a, b) => shiftBandRank(a) - shiftBandRank(b));
+}
+
 // 全角数字・区切り文字を半角に正規化
 function normStr(s) {
   return s
@@ -735,7 +750,7 @@ function buildSingleDayReply(dateStr, dayData, queryName, label) {
 
   const pendingNote = plan.length > 0 ? `・未承認${plan.length}件` : '';
   let msg = `📅 ${dateLabel}のシフト（確定${confirmed.length}名${pendingNote}）\n`;
-  for (const s of confirmed) {
+  for (const s of sortByBand(confirmed)) {
     const tl = getShiftTimeLabel(s);
     msg += `\n✅ ${s.subject}`;
     if (tl) msg += `\n   ⏰ ${tl}`;
@@ -764,7 +779,7 @@ function buildRangeReply(dates, byDate, rangeLabel, queryName) {
 
     const pendingNote = plan.length > 0 ? `・未承認${plan.length}件` : '';
     msg += `\n\n▸ ${formatDateFull(date)}（確定${confirmed.length}名${pendingNote}）`;
-    for (const s of confirmed) {
+    for (const s of sortByBand(confirmed)) {
       const tl = getShiftTimeLabel(s);
       msg += `\n  ✅ ${s.subject}`;
       if (tl) msg += `\n     ⏰ ${tl}`;
@@ -802,7 +817,7 @@ function buildPersonalWeekReply(memberName, dates, byDate) {
     const confirmed = (byDate[date]?.confirmed ?? []).filter(
       (s) => normName(s.memberName) === normName(memberName)
     );
-    for (const s of confirmed) {
+    for (const s of sortByBand(confirmed)) {
       const parts = [formatDateShort(date)];
       // subjectから名前部分を除いて帯ラベルのみ抽出（"A帯 田中太郎" → "A帯"）
       const subjectLabel = s.subject
