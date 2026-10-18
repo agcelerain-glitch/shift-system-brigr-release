@@ -579,9 +579,17 @@ function shiftBandRank(shift) {
   if (shift.timeType === 'other') return 5;  // その他
   return 6;
 }
-// 確定シフト配列を帯順に並べたコピーを返す（元配列は壊さない）
-function sortByBand(shifts) {
-  return [...shifts].sort((a, b) => shiftBandRank(a) - shiftBandRank(b));
+// 場所の並び順: ブリジャール→ルチア→セラス→ルミ・ベガ→場所指定なし（フロントのPLACE_OPTIONSと同一順）
+const PLACE_ORDER = ['ブリジャール', 'ルチア', 'セラス', 'ルミ・ベガ'];
+function placeRank(shift) {
+  const i = PLACE_ORDER.indexOf(shift.place || '');
+  return i >= 0 ? i : PLACE_ORDER.length;  // 場所未設定・その他は末尾
+}
+// 確定シフト配列を「場所順→帯順」に並べたコピーを返す（元配列は壊さない）
+function sortShifts(shifts) {
+  return [...shifts].sort((a, b) =>
+    placeRank(a) - placeRank(b) || shiftBandRank(a) - shiftBandRank(b)
+  );
 }
 
 // 全角数字・区切り文字を半角に正規化
@@ -750,7 +758,7 @@ function buildSingleDayReply(dateStr, dayData, queryName, label) {
 
   const pendingNote = plan.length > 0 ? `・未承認${plan.length}件` : '';
   let msg = `📅 ${dateLabel}のシフト（確定${confirmed.length}名${pendingNote}）\n`;
-  for (const s of sortByBand(confirmed)) {
+  for (const s of sortShifts(confirmed)) {
     const tl = getShiftTimeLabel(s);
     msg += `\n✅ ${s.subject}`;
     if (tl) msg += `\n   ⏰ ${tl}`;
@@ -779,7 +787,7 @@ function buildRangeReply(dates, byDate, rangeLabel, queryName) {
 
     const pendingNote = plan.length > 0 ? `・未承認${plan.length}件` : '';
     msg += `\n\n▸ ${formatDateFull(date)}（確定${confirmed.length}名${pendingNote}）`;
-    for (const s of sortByBand(confirmed)) {
+    for (const s of sortShifts(confirmed)) {
       const tl = getShiftTimeLabel(s);
       msg += `\n  ✅ ${s.subject}`;
       if (tl) msg += `\n     ⏰ ${tl}`;
@@ -817,7 +825,7 @@ function buildPersonalWeekReply(memberName, dates, byDate) {
     const confirmed = (byDate[date]?.confirmed ?? []).filter(
       (s) => normName(s.memberName) === normName(memberName)
     );
-    for (const s of sortByBand(confirmed)) {
+    for (const s of sortShifts(confirmed)) {
       const parts = [formatDateShort(date)];
       // subjectから名前部分を除いて帯ラベルのみ抽出（"A帯 田中太郎" → "A帯"）
       const subjectLabel = s.subject
@@ -932,6 +940,35 @@ async function notifySelfError(context, eventType, errorMsg) {
     // LINE失敗をDiscordへ追知（二重通知だがLINE障害の検知として有用）
     await notifyDiscord(`⚠️ [LINE通知失敗]\n${lineErr}\n\n元エラー: ${context} / ${eventType}`);
   }
+}
+
+// LINE SDK（@line/bot-sdk の HTTPFetchError）のエラーを人間が読める日本語に変換する。
+// status と body を参照し、特に429（送信過多）は「月間上限」と「レート制限」を区別する。
+// → 開発者への通知が "429 - Too Many Requests" ではなく原因が分かる文面になる。
+function describeLineError(err) {
+  const status = err?.status ?? err?.statusCode;
+  let bodyMsg = '';
+  if (err?.body) {
+    try {
+      const b = typeof err.body === 'string' ? JSON.parse(err.body) : err.body;
+      bodyMsg = b?.message || '';
+    } catch {
+      bodyMsg = typeof err.body === 'string' ? err.body.slice(0, 200) : '';
+    }
+  }
+  if (status === 429) {
+    if (/monthly limit/i.test(bodyMsg)) {
+      return 'LINEメッセージの月間上限に達したため送信できません（プッシュ配信が停止中）。LINE公式アカウントのプラン通数をご確認ください。';
+    }
+    if (/rate limit/i.test(bodyMsg)) {
+      return 'LINE APIのレート制限（短時間の送信が多すぎます）。少し待ってから再送してください。';
+    }
+    return `LINE APIが429（送信過多）を返しました${bodyMsg ? `：${bodyMsg}` : ''}`;
+  }
+  if (typeof status === 'number') {
+    return `LINE APIエラー（HTTP ${status}）${bodyMsg ? `：${bodyMsg}` : ''}`;
+  }
+  return err?.message ?? String(err);
 }
 
 async function handleGroupRegistration(newGroupId, senderUserId, db) {
@@ -1264,10 +1301,13 @@ async function handleLineEvent(event) {
 }
 
 app.use((err, _req, res, _next) => {
-  const msg = err?.message ?? String(err);
-  console.error('[server error]', { path: _req?.path, method: _req?.method, error: msg });
-  notifySelfError('APIエンドポイント', `${_req?.method} ${_req?.path}`, msg).catch(() => {});
-  res.status(500).json({ ok: false, message: msg });
+  const status = err?.status ?? err?.statusCode;
+  const detail = describeLineError(err);
+  console.error('[server error]', { path: _req?.path, method: _req?.method, status: status ?? null, error: detail });
+  notifySelfError('APIエンドポイント', `${_req?.method} ${_req?.path}`, detail).catch(() => {});
+  // LINE由来のHTTPステータス（429など）があれば踏襲し、無ければ500を返す
+  const resStatus = typeof status === 'number' && status >= 400 && status < 600 ? status : 500;
+  res.status(resStatus).json({ ok: false, message: detail });
 });
 
 // Express の外側で発生した未捕捉エラーを LINE に通知してからプロセス終了

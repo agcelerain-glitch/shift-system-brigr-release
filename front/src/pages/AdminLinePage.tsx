@@ -64,6 +64,13 @@ function timeGroupRank(label: string): number {
   return 4;                        // 時間指定（時刻レンジ）→ D帯の次
 }
 
+// 場所の並び順: ブリジャール→ルチア→セラス→ルミ・ベガ→場所指定なし
+// PLACE_OPTIONS の定義順に従い、未設定・その他は末尾にまとめる
+function placeRank(place: string): number {
+  const i = (PLACE_OPTIONS as readonly string[]).indexOf(place);
+  return i >= 0 ? i : PLACE_OPTIONS.length;
+}
+
 // 日付文字列を「M/D（曜）」形式に
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
 function formatShortDate(dateStr: string): string {
@@ -217,15 +224,20 @@ export function AdminLinePage() {
 
       return {
         date,
-        placeGroups: Array.from(placeMap.entries()).map(([place, tm]) => ({
-          place,
-          timeGroups: Array.from(tm.entries())
-            .map(([label, mbs]) => ({ label, members: mbs }))
-            .sort((a, b) =>
-              timeGroupRank(a.label) - timeGroupRank(b.label) ||
-              a.label.localeCompare(b.label, 'ja')
-            ),
-        })),
+        placeGroups: Array.from(placeMap.entries())
+          .map(([place, tm]) => ({
+            place,
+            timeGroups: Array.from(tm.entries())
+              .map(([label, mbs]) => ({ label, members: mbs }))
+              .sort((a, b) =>
+                timeGroupRank(a.label) - timeGroupRank(b.label) ||
+                a.label.localeCompare(b.label, 'ja')
+              ),
+          }))
+          .sort((a, b) =>
+            placeRank(a.place) - placeRank(b.place) ||
+            a.place.localeCompare(b.place, 'ja')
+          ),
         overCapacityPlaces,
       };
     });

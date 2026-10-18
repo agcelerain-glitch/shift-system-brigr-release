@@ -492,16 +492,28 @@ export async function callLineApi(path: string, body: Record<string, unknown>): 
       body: JSON.stringify(body),
     });
   };
+  // 失敗レスポンスを利用者向けメッセージに変換する。
+  // 5xx・429（サーバー/LINE側の障害でクライアントが対処できない）→ 開発者への連絡を促す。
+  //   ※LINEの月間上限など運用情報は利用者に見せず、開発者がLINE通知で詳細を受け取る設計。
+  // それ以外（GID未設定など利用者が対処できるもの）→ サーバーの案内をそのまま表示。
+  const parseFail = async (res: Response): Promise<{ ok: false; message: string }> => {
+    let serverMsg = '';
+    try { serverMsg = (await res.json())?.message ?? ''; } catch { /* body無し等は無視 */ }
+    if (res.status >= 500 || res.status === 429) {
+      return { ok: false, message: '送信に失敗しました。時間をおいて再度お試しいただき、解消しない場合は開発者へご連絡ください。' };
+    }
+    return { ok: false, message: serverMsg || `送信に失敗しました（HTTP ${res.status}）` };
+  };
   try {
     const res = await doFetch();
-    if (!res.ok) return { ok: false, message: `HTTP ${res.status}` };
+    if (!res.ok) return await parseFail(res);
     return { ok: true, message: '送信しました' };
   } catch {
     // ネットワークエラー（Herokuスリープ起動中など）は3秒待って1回リトライ
     await new Promise((r) => setTimeout(r, 3000));
     try {
       const res = await doFetch();
-      if (!res.ok) return { ok: false, message: `HTTP ${res.status}` };
+      if (!res.ok) return await parseFail(res);
       return { ok: true, message: '送信しました（再試行成功）' };
     } catch (e) {
       const msg = (e as Error)?.message ?? String(e);
