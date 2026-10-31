@@ -73,4 +73,118 @@ function buildBeforeState(id, data) {
   return Object.fromEntries(Object.entries(bs).filter(([, v]) => v !== undefined));
 }
 
+// ─── Firebase Admin 初期化（lock.js と同一・main内で呼ぶ） ─────
+function parseFirebasePrivateKey(raw) {
+  if (!raw) return null;
+  let key = raw.trim();
+  if (key.startsWith('"') && key.endsWith('"')) {
+    try { key = JSON.parse(key); } catch { key = key.slice(1, -1); }
+  }
+  if (key.startsWith("'") && key.endsWith("'")) key = key.slice(1, -1);
+  key = key.replace(/\\n/g, '\n').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  return key;
+}
+
+function initFirebase() {
+  if (admin.apps.length) return;
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+    admin.initializeApp();
+    console.log('[auto-deny] Firebase Admin 初期化成功 (GOOGLE_APPLICATION_CREDENTIALS)');
+  } else {
+    const projectId = process.env.FIREBASE_PROJECT_ID;
+    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+    const privateKey = parseFirebasePrivateKey(process.env.FIREBASE_PRIVATE_KEY);
+    if (!projectId || !clientEmail || !privateKey) {
+      console.error('[auto-deny] 必須環境変数未設定: FIREBASE_PROJECT_ID / FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY');
+      process.exit(1);
+    }
+    admin.initializeApp({ credential: admin.credential.cert({ projectId, clientEmail, privateKey }) });
+    console.log('[auto-deny] Firebase Admin 初期化成功 (env vars)');
+  }
+}
+
+// ─── LINE（失敗時通知のみ） ───────────────────────────────
+async function notifyFailure(message) {
+  const token = process.env.CHANNEL_ACCESS_TOKEN;
+  const selfId = process.env.LINE_SELF_USER_ID;
+  if (!token || !selfId) return;
+  try {
+    const client = new messagingApi.MessagingApiClient({ channelAccessToken: token });
+    await client.pushMessage({
+      to: selfId,
+      messages: [{ type: 'text', text: `[自動否認ジョブ失敗]\n${new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}\nエラー: ${message}` }],
+    });
+  } catch (e) {
+    console.error('[auto-deny] 失敗通知の送信に失敗:', e?.message ?? e);
+  }
+}
+
+// ─── メイン ──────────────────────────────────────────────
+async function main() {
+  initFirebase();
+  const db = admin.firestore();
+
+  const cutoff = toDateStr(todayJST());
+  const mode = DRY_RUN ? '[DRY-RUN] ' : '';
+  console.log(`[auto-deny] ${mode}開始 — date < ${cutoff} の未処理(plan)を否認`);
+
+  // 単一フィールドクエリ + メモリ内フィルタ（複合インデックス回避）
+  const snap = await db.collection('shifts').where('date', '<', cutoff).get();
+  const targets = snap.docs.filter((d) => isAutoDenyTarget(d.data(), cutoff));
+
+  if (targets.length === 0) {
+    console.log('[auto-deny] 対象なし — 終了');
+    return;
+  }
+
+  console.log(`[auto-deny] 否認対象: ${targets.length}件`);
+  targets.forEach((d) => {
+    const x = d.data();
+    console.log(`  - ${x.date} ${formatDateShort(x.date)} ${x.memberName}（${x.subject ?? ''}）`);
+  });
+
+  if (DRY_RUN) {
+    console.log(`[auto-deny][DRY-RUN] ${targets.length}件を否認対象として表示（Firestore更新スキップ）`);
+    return;
+  }
+
+  // バッチ更新（1シフト=2オペ。500オペ上限 → 250件ごと）
+  const CHUNK = 250;
+  let denied = 0;
+  for (let i = 0; i < targets.length; i += CHUNK) {
+    const batch = db.batch();
+    const chunk = targets.slice(i, i + CHUNK);
+    for (const d of chunk) {
+      const data = d.data();
+      batch.update(d.ref, {
+        status: 'reviewed',
+        version: (typeof data.version === 'number' ? data.version : 1) + 1,
+        updatedAt: Date.now(),
+      });
+      const logRef = db.collection('approvalLogs').doc();
+      batch.set(logRef, {
+        shiftId: d.id,
+        beforeState: buildBeforeState(d.id, data),
+        action: 'deny',
+        adminName: '自動否認(システム)',
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+    await batch.commit();
+    denied += chunk.length;
+    console.log(`[auto-deny] バッチ更新: ${denied}/${targets.length}件`);
+  }
+
+  console.log(`[auto-deny] ${mode}完了 — ${denied}件を自動否認（reviewed）`);
+}
+
+if (require.main === module) {
+  main().catch(async (e) => {
+    const msg = e?.message ?? String(e);
+    console.error('[auto-deny] 予期しないエラー:', msg);
+    await notifyFailure(msg);
+    process.exit(1);
+  });
+}
+
 module.exports = { isAutoDenyTarget, buildBeforeState, toMs, todayJST, toDateStr, formatDateShort };
