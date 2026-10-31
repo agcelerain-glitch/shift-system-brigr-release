@@ -1098,9 +1098,21 @@ export function AdminShiftPage() {
               )}
             </div>
 
-            {/* 場所 */}
+            {/* 場所（承認モーダルと同様に前回場所を推奨表示） */}
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">場所</label>
+              {/* 初回（lastPlaceなし）の場合は警告表示 */}
+              {!getMemberLastPlace(adjusting.memberName) && (
+                <div className="flex items-start gap-2 bg-amber-50 text-amber-700 text-xs px-3 py-2 rounded-lg mb-2">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <span>初回です。場所を設定してください</span>
+                </div>
+              )}
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                場所
+                {getMemberLastPlace(adjusting.memberName) && (
+                  <span className="text-xs font-normal text-gray-400 ml-1">（前回: {getMemberLastPlace(adjusting.memberName)}）</span>
+                )}
+              </label>
               <Select value={adjPlace} onChange={(e) => setAdjPlace(e.target.value)}>
                 <option value="">指定なし</option>
                 {PLACE_OPTIONS.map((p) => (
