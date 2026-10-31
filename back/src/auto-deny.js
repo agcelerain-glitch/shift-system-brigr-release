@@ -95,8 +95,7 @@ function initFirebase() {
     const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
     const privateKey = parseFirebasePrivateKey(process.env.FIREBASE_PRIVATE_KEY);
     if (!projectId || !clientEmail || !privateKey) {
-      console.error('[auto-deny] 必須環境変数未設定: FIREBASE_PROJECT_ID / FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY');
-      process.exit(1);
+      throw new Error('必須環境変数未設定: FIREBASE_PROJECT_ID / FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY');
     }
     admin.initializeApp({ credential: admin.credential.cert({ projectId, clientEmail, privateKey }) });
     console.log('[auto-deny] Firebase Admin 初期化成功 (env vars)');
