@@ -1222,23 +1222,25 @@ async function handleLineEvent(event) {
       let replyText;
 
       if (db && lineUserId) {
-        const [nameSnap, lineIdSnap] = await Promise.all([
-          db.collection('members').where('name', '==', memberName).limit(1).get(),
+        const [allSnap, lineIdSnap] = await Promise.all([
+          db.collection('members').get(),
           db.collection('members').where('lineUserId', '==', lineUserId).limit(1).get(),
         ]);
 
-        if (nameSnap.empty) {
+        // スペースを無視して照合（全角・半角どちらで保存/入力されていても一致させる）
+        const nameDoc = allSnap.docs.find((d) => normName(d.data().name) === normName(memberName));
+
+        if (!nameDoc) {
           console.log(`[webhook] 名前不一致: "${memberName}" は membersコレクションに存在しない`);
           const frontendUrl = process.env.FRONTEND_URL ?? process.env.ALLOWED_ORIGIN ?? '';
           const loginLine = frontendUrl ? `\n${frontendUrl}/login\n` : '\n';
           replyText = `「${memberName}」はメンバー一覧に見つかりません。\n\nまずシフト管理システムにログインして名前を登録してください：${loginLine}\nシステムに登録されている名前と完全一致させて再度お試しください。`;
 
-        } else if (!lineIdSnap.empty && lineIdSnap.docs[0].id !== nameSnap.docs[0].id) {
+        } else if (!lineIdSnap.empty && lineIdSnap.docs[0].id !== nameDoc.id) {
           const existingName = lineIdSnap.docs[0].data().name;
           replyText = `このLINEアカウントは既に「${existingName}」として登録されています。\n\n1つのLINEアカウントで登録できる名前は1つのみです。`;
 
         } else {
-          const nameDoc = nameSnap.docs[0];
           const existingLineId = nameDoc.data().lineUserId;
 
           if (existingLineId && existingLineId !== lineUserId) {
