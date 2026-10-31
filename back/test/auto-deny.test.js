@@ -1,7 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { isAutoDenyTarget, buildBeforeState, toMs } = require('../src/auto-deny');
+const { isAutoDenyTarget, buildBeforeState, toMs, toDateStr, todayJST } = require('../src/auto-deny');
 
 const CUTOFF = '2026-11-01';
 
@@ -54,4 +54,27 @@ test('buildBeforeState: undefined フィールドを除去する', () => {
 test('buildBeforeState: version 未設定なら 1 を補完', () => {
   const bs = buildBeforeState('x', { memberName: 'a', date: '2026-10-31', status: 'plan', timeType: 'time', subject: 's' });
   assert.equal(bs.version, 1);
+});
+
+test('toDateStr: 1桁の月日をゼロ埋めして YYYY-MM-DD を返す', () => {
+  assert.equal(toDateStr(new Date(Date.UTC(2026, 0, 5))), '2026-01-05');
+  assert.equal(toDateStr(new Date(Date.UTC(2026, 11, 31))), '2026-12-31');
+});
+
+test('todayJST: UTC 0時に正規化された Date を返す', () => {
+  const d = todayJST();
+  assert.ok(d instanceof Date);
+  assert.equal(d.getUTCHours(), 0);
+  assert.equal(d.getUTCMinutes(), 0);
+  assert.equal(d.getUTCSeconds(), 0);
+  assert.equal(d.getUTCMilliseconds(), 0);
+});
+
+test('buildBeforeState: 0 など falsy だが undefined でない値は保持する', () => {
+  const bs = buildBeforeState('h', {
+    memberName: 'a', date: '2026-10-31', status: 'plan', timeType: 'time',
+    subject: 's', headcount: 0, version: 2,
+  });
+  assert.equal('headcount' in bs, true);
+  assert.equal(bs.headcount, 0);
 });
