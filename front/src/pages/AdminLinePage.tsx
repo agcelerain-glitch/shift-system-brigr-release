@@ -1,6 +1,6 @@
 // /admin-line LINE操作: グループ送信・自分への連絡・個別チャット・GID管理
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { AdminLayout } from '../components/AdminLayout';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -9,7 +9,7 @@ import { Card, Button, FloatTextarea, Select, Badge, Modal } from '../components
 import {
   Send, Bell, MessageCircle, Megaphone, Users, Info, Trash2, Wifi, WifiOff,
   CalendarDays, X, BellPlus, CheckSquare, Square, ChevronDown, ChevronUp,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, AlertTriangle,
 } from 'lucide-react';
 import { callLineApi, subscribeLineConfig, deleteGroupId, sendShiftRequestInvites, deleteShiftRequest } from '../lib/db';
 import { isFirebaseConfigured, API_BASE_URL } from '../lib/firebase';
@@ -17,6 +17,7 @@ import { formatDateJP, todayStr, displayTime, isWeekendCapacity } from '../lib/u
 import { MonthCalendar, DayShiftList } from '../components/MonthCalendar';
 import { PLACE_OPTIONS, TEMPLATE_LABELS, PLACE_CAPACITY, PLACE_SHORT } from '../lib/config';
 import type { Shift } from '../lib/types';
+import { type PositionRow, buildPositionMessage as buildPositionMessagePure, pruneSelectedMembers } from '../lib/position';
 
 // 配置テンプレート（固定順序）
 const TEMPLATE_POSITIONS = [
@@ -25,14 +26,6 @@ const TEMPLATE_POSITIONS = [
 
 // 固定常駐メンバー（バイトシフト外）
 const FIXED_MEMBERS = ['松村', '中嶋', '笠井', '下村', '樋口', '雪愛', '保坂', '金田', '奈良', '今福', '大澤', '遠藤'];
-
-type PositionRow = {
-  id: string;
-  position: string;
-  positionCustom: string;     // other1 の自由記入名
-  selectedMembers: string[];  // チップ選択したメンバー名
-  freeInputName: string;      // 直接入力（急な交代など）
-};
 
 function initPosRows(): PositionRow[] {
   return TEMPLATE_POSITIONS.map((pos) => ({
@@ -91,6 +84,8 @@ export function AdminLinePage() {
   const [posPlaceCustom, setPosPlaceCustom] = useState('');
   const [posRows, setPosRows] = useState<PositionRow[]>(initPosRows);
   const [posMemo, setPosMemo] = useState('');
+  // 確定取消で配置から自動除去されたメンバー（送信前の気付き用。送信/手動クリアで消す）
+  const [posRemovedNotice, setPosRemovedNotice] = useState<string[]>([]);
   // グループ送信②: シフト連絡
   const [shiftShareWeekOffset, setShiftShareWeekOffset] = useState(1);
   const [shiftShareExtras, setShiftShareExtras] = useState<{ date: string; place: string; name: string }[]>([]);
@@ -153,6 +148,22 @@ export function AdminLinePage() {
     }
     return [...new Set([...FIXED_MEMBERS, ...todayConfirmedMembers])];
   }, [todayConfirmedMembers, todayShifts, posPlace]);
+
+  // 確定シフトの変化（否認・復元・調整で場所変更など）に配置選択を追従させる。
+  // 選択後に確定が取り消されたメンバーを selectedMembers から自動除去し、送信前に気付けるよう通知する。
+  // allPosMembers は毎描画で新参照になるため、内容を表す文字列キーで実変化のみ検知する。
+  const allowedKey = useMemo(() => [...allPosMembers].sort().join(''), [allPosMembers]);
+  const posRowsRef = useRef(posRows);
+  posRowsRef.current = posRows;
+  useEffect(() => {
+    const { rows, removed, changed } = pruneSelectedMembers(posRowsRef.current, new Set(allPosMembers));
+    if (!changed) return;
+    setPosRows(rows);
+    setPosRemovedNotice((prev) => [...new Set([...prev, ...removed])]);
+    toast.show(`確定取消のため ${removed.join('、')} さんを当日配置から自動で外しました。送信前にご確認ください。`, 'info');
+    // allowedKey が allPosMembers の内容を表す。allPosMembers 直接依存だと毎描画で発火するためキーに限定。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allowedKey]);
 
   const lineMembers = members.filter((m) => m.lineUserId);
   const adminMember = members.find((m) => m.name === adminName);
@@ -293,25 +304,13 @@ export function AdminLinePage() {
     }
   };
 
-  const buildPositionMessage = (): string => {
-    const dateLabel = formatDateJP(todayStr());
-    let msg = `📅 ${dateLabel} ポジション配置`;
-    const placeDisplay = posPlace === '__custom__' ? posPlaceCustom.trim() : posPlace;
-    if (placeDisplay) msg += `\n📍 ${placeDisplay}`;
-    msg += '\n';
-    for (const row of posRows) {
-      const posName = row.position === 'other1'
-        ? row.positionCustom.trim()
-        : row.position;
-      if (!posName) continue;
-      const persons: string[] = [...row.selectedMembers];
-      row.freeInputName.split(/[,、]/).map((n) => n.trim()).filter(Boolean).forEach((n) => persons.push(n));
-      if (persons.length === 0) continue;
-      msg += `\n▸ ${posName}: ${persons.join('、')}`;
-    }
-    if (posMemo.trim()) msg += `\n\n${posMemo.trim()}`;
-    return msg;
-  };
+  const buildPositionMessage = (): string =>
+    buildPositionMessagePure({
+      dateLabel: formatDateJP(todayStr()),
+      place: posPlace === '__custom__' ? posPlaceCustom.trim() : posPlace,
+      rows: posRows,
+      memo: posMemo,
+    });
 
   const sendSelf = async () => {
     if (!selfMsg.trim()) return;
@@ -694,6 +693,24 @@ export function AdminLinePage() {
             )}
           </div>
 
+          {/* 確定取消による自動除去の通知 */}
+          {posRemovedNotice.length > 0 && (
+            <div className="mb-3 flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2">
+              <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+              <p className="flex-1 text-xs text-amber-800 leading-relaxed">
+                <span className="font-medium">{posRemovedNotice.join('、')}</span> さんは確定が取り消された（否認・復元など）ため、当日配置の選択から自動で外しました。送信内容をご確認ください。
+              </p>
+              <button
+                type="button"
+                onClick={() => setPosRemovedNotice([])}
+                className="text-amber-500 hover:text-amber-700 shrink-0"
+                aria-label="閉じる"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           {/* 配置行（固定テンプレート） */}
           <div className="space-y-3 mb-3">
             {posRows.map((row) => {
@@ -832,6 +849,7 @@ export function AdminLinePage() {
                   setPosMemo('');
                   setPosPlace('');
                   setPosPlaceCustom('');
+                  setPosRemovedNotice([]);
                 });
               }}
               disabled={sending || !groupId || posRows.every((r) => r.selectedMembers.length === 0 && !r.freeInputName.trim())}
