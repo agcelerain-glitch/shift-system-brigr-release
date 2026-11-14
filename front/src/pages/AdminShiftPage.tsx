@@ -11,7 +11,7 @@ import {
   CalendarDays, Calendar, Hash, ChevronDown, ChevronRight, History, Trash2, Plus, Minus,
   AlertTriangle, BellPlus, X,
 } from 'lucide-react';
-import { formatDateJP, formatDateTimeJP, isPast7Days, weekdayJP, todayStr, addDays, displayTime, isWeekendCapacity } from '../lib/utils';
+import { formatDateJP, formatDateTimeJP, approvalLogRestoreState, weekdayJP, todayStr, addDays, displayTime, isWeekendCapacity } from '../lib/utils';
 import { PLACE_OPTIONS, TEMPLATE_LABELS, TEMPLATE_TIMES, PLACE_CAPACITY, PLACE_SHORT } from '../lib/config';
 import type { Shift, ApprovalLog } from '../lib/types';
 import type { TemplateCode } from '../lib/config';
@@ -446,7 +446,7 @@ export function AdminShiftPage() {
 
   const doRestore = async (log: ApprovalLog) => {
     try {
-      const res = await restoreShift(log.id);
+      const res = await restoreShift(log.id, adminName);
       if (res === 'ok') {
         toast.show('復元しました', 'success');
         // 復元成功後、該当の調整マークを自動解除
@@ -460,6 +460,7 @@ export function AdminShiftPage() {
           });
         }
       } else if (res === 'expired') toast.show('7日経過のため復元不可です', 'error');
+      else if (res === 'already') toast.show('このログは既に復元済みです（画面を更新してください）', 'error');
       else if (res === 'conflict') toast.show('競合: 別のadminが同時操作中です。画面を更新してから再試行してください', 'error');
       else toast.show('復元に失敗しました', 'error');
     } catch (e) {
@@ -1344,7 +1345,7 @@ export function AdminShiftPage() {
                   </div>
                   <div className="space-y-2">
                     {filteredLogs.flatMap((log, idx) => {
-                      const expired = !isPast7Days(log.createdAt);
+                      const rState = approvalLogRestoreState(log);
                       const before = log.beforeState;
                       const isMarked = before ? markedKeys.has(mkKey(before.date, before.memberName)) : false;
                       const getGroupKey = (): string => {
@@ -1398,9 +1399,15 @@ export function AdminShiftPage() {
                               )}
                               <span className="text-xs text-gray-500 underline decoration-gray-300">{formatDateTimeJP(log.createdAt)}</span>
                             </div>
-                            <Button size="sm" variant="ghost" disabled={expired} onClick={() => doRestore(log)}>
-                              <RotateCcw className="w-3.5 h-3.5" />復元
-                            </Button>
+                            {rState === 'consumed' ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-400 px-2 py-1">
+                                <RotateCcw className="w-3 h-3" />復元済み
+                              </span>
+                            ) : (
+                              <Button size="sm" variant="ghost" disabled={rState !== 'restorable'} onClick={() => doRestore(log)}>
+                                <RotateCcw className="w-3.5 h-3.5" />復元
+                              </Button>
+                            )}
                           </div>
                           {before && (
                             <p className="text-xs text-gray-600">
@@ -1411,7 +1418,12 @@ export function AdminShiftPage() {
                               {before.place && <span className="ml-1 text-gray-400">({before.place})</span>}
                             </p>
                           )}
-                          {expired && <p className="text-[10px] text-gray-400 mt-1">7日経過のため復元不可</p>}
+                          {rState === 'expired' && <p className="text-[10px] text-gray-400 mt-1">7日経過のため復元不可</p>}
+                          {rState === 'consumed' && (
+                            <p className="text-[10px] text-gray-400 mt-1">
+                              復元済み{log.restoredBy ? ` · ${log.restoredBy}` : ''}{log.restoredAt ? ` · ${formatDateTimeJP(log.restoredAt)}` : ''}
+                            </p>
+                          )}
                         </div>,
                       ];
                     })}

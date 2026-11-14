@@ -106,6 +106,9 @@ export interface ApprovalLog {
   action: 'approve' | 'deny' | 'adjust';
   adminName: string;
   createdAt: number;
+  // 復元監査: 復元実行時に記録（セットされているログは「復元済み」＝再復元不可）
+  restoredAt?: number;
+  restoredBy?: string;
 }
 
 // 削除済み掲示板（ソフトデリート用）

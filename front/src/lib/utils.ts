@@ -28,6 +28,19 @@ export const formatDateTimeJP = (ms: number): string => {
 
 export const isPast7Days = (ms: number): boolean => Date.now() - ms < 7 * 24 * 60 * 60 * 1000;
 
+// 承認ログの復元可否を判定（純粋関数）。
+// consumed（復元済み）を最優先 → no_snapshot → expired（7日経過） → restorable。
+export type LogRestoreState = 'restorable' | 'expired' | 'consumed' | 'no_snapshot';
+export const approvalLogRestoreState = (
+  log: { beforeState: unknown | null; createdAt: number; restoredAt?: number },
+  nowMs: number = Date.now(),
+): LogRestoreState => {
+  if (log.restoredAt) return 'consumed';
+  if (!log.beforeState) return 'no_snapshot';
+  if (nowMs - log.createdAt > 7 * 24 * 60 * 60 * 1000) return 'expired';
+  return 'restorable';
+};
+
 // 月のカレンダーグリッド(6週=42日)を返す（UTCズレ修正済み）
 export const getMonthGrid = (year: number, month: number): string[] => {
   const first = new Date(year, month, 1);

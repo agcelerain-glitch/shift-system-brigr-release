@@ -293,26 +293,29 @@ export async function approveShift(p: ApproveParams): Promise<'ok' | 'conflict'>
   }
 }
 
-// 7日以内の承認ログから復元
-export async function restoreShift(logId: string): Promise<'ok' | 'expired' | 'conflict'> {
-  if (!isFirebaseConfigured) return mockStore.restoreShift(logId);
+// 7日以内の承認ログから復元。復元時にログを削除せず restoredAt/restoredBy を刻んで
+// 「復元済み」として監査記録に残す（再復元はガードで防止）。古いログは clean.js(22日) が掃除。
+export async function restoreShift(logId: string, adminName: string): Promise<'ok' | 'expired' | 'conflict' | 'already'> {
+  if (!isFirebaseConfigured) return mockStore.restoreShift(logId, adminName);
   const logRef = doc(db!, 'approvalLogs', logId);
   try {
     await runTransaction(db!, async (tx) => {
       const logSnap = await tx.get(logRef);
       if (!logSnap.exists()) throw new Error('log not found');
-      const log = logSnap.data() as { shiftId: string; beforeState: Shift | null; createdAt: Timestamp };
+      const log = logSnap.data() as { shiftId: string; beforeState: Shift | null; createdAt: Timestamp; restoredAt?: Timestamp };
+      if (log.restoredAt) throw new Error('ALREADY'); // 既に復元済み（二重復元防止）
       if (Date.now() - toMs(log.createdAt) > 7 * 24 * 60 * 60 * 1000) throw new Error('EXPIRED');
       if (!log.beforeState) throw new Error('no beforeState');
       const shiftRef = doc(db!, 'shifts', log.shiftId);
       tx.set(shiftRef, { ...log.beforeState, updatedAt: serverTimestamp(), version: log.beforeState.version + 1 }, { merge: true });
-      // 復元完了後はログ自体を削除（使用済みログの蓄積・バッジ誤表示を防ぐ）
-      tx.delete(logRef);
+      // 削除せず復元メタを記録（誰がいつ復元したかを7日間ログ一覧に残す）
+      tx.update(logRef, { restoredAt: serverTimestamp(), restoredBy: adminName });
     });
     return 'ok';
   } catch (e) {
     const msg = (e as Error).message;
     if (msg === 'EXPIRED') return 'expired';
+    if (msg === 'ALREADY') return 'already';
     throw e;
   }
 }
@@ -334,6 +337,8 @@ export function subscribeApprovalLogs(cb: (items: ApprovalLog[]) => void): () =>
       action: r.action as ApprovalLog['action'],
       adminName: r.adminName as string,
       createdAt: toMs(r.createdAt),
+      restoredAt: r.restoredAt ? toMs(r.restoredAt) : undefined,
+      restoredBy: r.restoredBy as string | undefined,
     }) as ApprovalLog,
     cb,
   );

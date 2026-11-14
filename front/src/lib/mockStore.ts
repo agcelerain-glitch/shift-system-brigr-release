@@ -158,9 +158,10 @@ export const mockStore = {
     return 'ok';
   },
 
-  restoreShift(logId: string): 'ok' | 'expired' | 'conflict' {
+  restoreShift(logId: string, adminName: string): 'ok' | 'expired' | 'conflict' | 'already' {
     const log = state.approvalLogs.find((l) => l.id === logId);
     if (!log) return 'conflict';
+    if (log.restoredAt) return 'already'; // 既に復元済み（二重復元防止）
     if (Date.now() - log.createdAt > 7 * DAY) return 'expired';
     if (!log.beforeState) return 'conflict';
     const s = state.shifts.find((x) => x.id === log.shiftId);
@@ -169,7 +170,9 @@ export const mockStore = {
     } else {
       state.shifts.push({ ...log.beforeState, version: log.beforeState.version + 1, updatedAt: Date.now() });
     }
-    state.approvalLogs = state.approvalLogs.filter((l) => l.id !== logId);
+    // 削除せず復元メタを記録（本番 db.ts と挙動を合わせる）
+    log.restoredAt = Date.now();
+    log.restoredBy = adminName;
     notify('shifts');
     notify('approvalLogs');
     return 'ok';
